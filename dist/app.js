@@ -1,4 +1,5 @@
 import { products, filterProducts, whatsappUrl } from './catalog.js';
+import { enhanceFilters, syncFilters, focusFirstFilter } from './filters.js';
 
 const icon = id => `<svg class="icon" aria-hidden="true"><use href="#i-${id}"/></svg>`;
 const escapeHTML = value => String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -6,6 +7,7 @@ const dialog = document.querySelector('#product-dialog');
 const sizeSelect = document.querySelector('#product-size');
 let selectedProduct;
 let lastTrigger;
+enhanceFilters();
 
 function renderCategory(category) {
   const form = document.querySelector(`#${category}-filters`);
@@ -26,7 +28,7 @@ function renderCategory(category) {
   feedback.hidden = !active;
   feedback.querySelector('span').textContent = `Найдено: ${visible.length}`;
   document.querySelector(`#${category}-empty`).hidden = visible.length > 0;
-  form.querySelectorAll('select').forEach(select => select.classList.toggle('active',Boolean(select.value)));
+  syncFilters(form);
 }
 
 function openProduct(id, trigger) {
@@ -44,6 +46,7 @@ function openProduct(id, trigger) {
   sizeSelect.replaceChildren(...p.sizes.map(size => new Option(`${size} см`,size)));
   const filterSize = document.querySelector(`#${p.category}-filters [name="size"]`).value;
   if (p.sizes.includes(filterSize)) sizeSelect.value = filterSize;
+  document.querySelector('#size-options').innerHTML = p.sizes.map(size => `<label class="size-option"><input type="radio" name="model-size" value="${size}" ${size === sizeSelect.value ? 'checked' : ''}><span>${size}<small>см</small></span></label>`).join('');
   updateDraft();
   dialog.showModal();
 }
@@ -64,7 +67,7 @@ document.addEventListener('click',event => {
     const form = document.querySelector(`#${category}-filters`);
     form.reset();
     renderCategory(category);
-    form.querySelector('select').focus({preventScroll:true});
+    focusFirstFilter(form);
   }
 });
 document.querySelector('.dialog-close').addEventListener('click',() => dialog.close());
@@ -75,4 +78,10 @@ dialog.addEventListener('click',event => {
 });
 dialog.addEventListener('close',() => lastTrigger?.focus({preventScroll:true}));
 sizeSelect.addEventListener('change',updateDraft);
+document.querySelector('#size-options').addEventListener('change', event => {
+  if (event.target.matches('input[type="radio"]')) {
+    sizeSelect.value = event.target.value;
+    updateDraft();
+  }
+});
 document.querySelectorAll('[data-whatsapp]').forEach(link => link.href = whatsappUrl());
