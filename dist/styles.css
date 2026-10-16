@@ -1,5 +1,21 @@
 @layer base, layout, components, responsive;
 @layer components {
+  .delivery-section{margin-top:56px;background:#f3f1ed;border-block:1px solid #eae6df}
+  .delivery-inner{display:flex;align-items:center;justify-content:space-between;gap:56px;min-height:230px}
+  .delivery-copy{padding:36px 0;max-width:670px}
+  .delivery-copy h2{font-size:32px;font-weight:600;line-height:1.2;letter-spacing:-.025em}
+  .delivery-copy p{margin-top:14px;color:#625d56;font-size:16px;line-height:1.65;max-width:620px}
+  .delivery-link{display:inline-flex;align-items:center;gap:12px;min-height:40px;margin-top:10px;font-size:14px;text-decoration:underline;text-underline-offset:4px;text-decoration-color:#9a9186}
+  .delivery-link .icon{width:18px;height:18px}
+  .delivery-link:hover{color:#b35d17;text-decoration-color:currentColor}
+  .delivery-porter{display:block;width:380px;max-width:38%;height:auto;flex-shrink:0;align-self:flex-end;margin-bottom:22px}
+  #delivery-details{scroll-margin-top:24px}
+}
+@layer responsive {
+  @media(max-width:1100px){.delivery-inner{gap:32px}.delivery-porter{width:330px}.delivery-copy p{font-size:15px}}
+  @media(max-width:760px){.delivery-section{margin-top:38px}.delivery-inner{flex-direction:column;align-items:flex-start;gap:0}.delivery-copy{padding:28px 0 8px}.delivery-copy h2{font-size:29px}.delivery-copy p{margin-top:12px;font-size:15px}.delivery-link{margin-top:8px}.delivery-porter{width:300px;max-width:90%;margin:8px 0 20px;align-self:flex-end}}
+}
+@layer components {
   .social-links{display:flex;align-items:center;gap:20px;margin-left:auto}
   .social-link{display:inline-flex;align-items:center;gap:9px;min-height:36px;font-size:13px;white-space:nowrap}
   .social-link .icon{width:20px;height:20px}

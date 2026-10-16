@@ -85,3 +85,9 @@ document.querySelector('#size-options').addEventListener('change', event => {
   }
 });
 document.querySelectorAll('[data-whatsapp]').forEach(link => link.href = whatsappUrl());
+
+document.querySelector('.delivery-link').addEventListener('click', () => {
+  const details = document.querySelector('#delivery-details');
+  details.open = true;
+  details.querySelector('summary').focus({preventScroll:true});
+});
