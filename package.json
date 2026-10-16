@@ -1,0 +1,1 @@
+{"name":"mebelvia-showroom","version":"1.0.0","private":true,"type":"module","scripts":{"start":"node preview.mjs","test":"node --test test/catalog.test.mjs"}}
