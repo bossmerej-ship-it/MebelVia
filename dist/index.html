@@ -8,7 +8,7 @@
   <meta name="robots" content="noindex, nofollow">
   <title>MebelVia — кровати и матрасы в Астане</title>
   <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
-  <link rel="preload" as="image" href="assets/bedroom.png" fetchpriority="high">
+  <link rel="preload" as="image" href="assets/bedroom.webp" fetchpriority="high">
   <link rel="stylesheet" href="styles.css">
   <script src="app.js" type="module"></script>
 </head>
@@ -37,7 +37,7 @@
   </header>
   <main id="top">
     <section class="hero" aria-labelledby="hero-title">
-      <img class="hero-image" src="assets/bedroom.png" alt="Светлая спальня с мягкой бежевой кроватью" width="1942" height="809" fetchpriority="high">
+      <img class="hero-image" src="assets/bedroom.webp" alt="Светлая спальня с мягкой бежевой кроватью" width="1942" height="809" fetchpriority="high">
       <div class="hero-inner container">
         <div class="hero-copy">
           <h1 id="hero-title">Кровати и матрасы<br>в Астане</h1>
@@ -62,6 +62,15 @@
       <div id="bed-grid" class="product-grid"></div>
       <div id="bed-empty" class="empty-state" hidden><h3>Подходящих кроватей пока нет</h3><p>Попробуйте другой размер или уберите один из фильтров.</p><button class="button button-quiet" data-reset="bed">Сбросить фильтры</button></div>
     </section>
+    <section class="collection-section container" aria-labelledby="collection-title">
+      <div class="collection-copy">
+        <span class="eyebrow">Коллекция для вдохновения</span>
+        <h2 id="collection-title">Спальня<br>в тёплых тонах</h2>
+        <p>Мягкие формы, спокойные оттенки и уютные фактуры. Начните с кровати — главного места для отдыха.</p>
+        <a class="collection-link" href="#beds">Посмотреть кровати<svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></a>
+      </div>
+      <img class="collection-image" src="assets/bedroom.webp" alt="Мягкая бежевая кровать в спальне с натуральными оттенками" width="1942" height="809" loading="lazy" decoding="async">
+    </section>
     <section id="mattresses" class="catalog mattress-section container" aria-labelledby="mattresses-title">
       <div class="section-heading">
         <div><h2 id="mattresses-title">Матрасы</h2><p class="section-subtitle">Выберите комфортную жёсткость</p></div>
@@ -82,7 +91,7 @@
           <p>Согласуйте с консультантом сроки, стоимость и удобное время доставки вашей мебели.</p>
           <a class="delivery-link" href="#delivery-details">Подробнее о доставке<svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></a>
         </div>
-        <img class="delivery-porter" src="assets/porter-line-art.png" alt="Контурный рисунок грузовика Hyundai Porter с открытым кузовом" width="2098" height="749" loading="lazy">
+        <img class="delivery-porter" src="assets/porter-line-art.webp" alt="Контурный рисунок грузовика Hyundai Porter с открытым кузовом" width="2098" height="749" loading="lazy" decoding="async">
       </div>
     </section>
     <section class="help-section container" aria-label="Информация перед покупкой">
@@ -108,10 +117,16 @@
     </nav>
     <p class="demo-note">Демонстрационный каталог.<br>Фото и характеристики — примеры.</p>
   </footer>
+  <aside id="whatsapp-hint" class="whatsapp-hint" aria-label="Помощь с выбором" hidden>
+    <button type="button" class="hint-close" aria-label="Закрыть подсказку"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button>
+    <strong>Помочь с выбором?</strong>
+    <p>Обсудим размер и модель в WhatsApp.</p>
+    <a data-whatsapp href="https://wa.me/77016000330" target="_blank" rel="noopener noreferrer">Написать консультанту<svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></a>
+  </aside>
   <a class="floating-whatsapp" data-whatsapp href="https://wa.me/77016000330" target="_blank" rel="noopener noreferrer" aria-label="Написать в WhatsApp"><svg class="icon" aria-hidden="true"><use href="#i-whatsapp"/></svg><span>WhatsApp</span></a>
   <dialog id="product-dialog" aria-labelledby="dialog-title">
     <button type="button" class="dialog-close" aria-label="Закрыть карточку товара" autofocus><svg class="icon"><use href="#i-close"/></svg></button>
-    <div class="dialog-layout"><div id="dialog-photo" class="dialog-photo" role="img"></div><div class="dialog-content">
+    <div class="dialog-layout"><div id="dialog-photo" class="dialog-photo"></div><div class="dialog-content">
       <span id="dialog-category" class="eyebrow"></span><h2 id="dialog-title"></h2><p id="dialog-description"></p>
       <dl id="dialog-specs"></dl>
       <fieldset class="size-picker"><legend>Размер спального места</legend><div id="size-options" class="size-options"></div></fieldset>

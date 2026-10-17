@@ -1,5 +1,7 @@
 import { products, filterProducts, whatsappUrl } from './catalog.js';
 import { enhanceFilters, syncFilters, focusFirstFilter } from './filters.js';
+import { productPhotos, initProductPhotos } from './product-photos.js';
+import { initConsultationHint } from './consultation-hint.js';
 
 const siteHeader = document.querySelector('.site-header');
 const fitFirstScreen = () => document.documentElement.style.setProperty('--site-header-height', `${siteHeader.getBoundingClientRect().height}px`);
@@ -20,14 +22,12 @@ function renderCategory(category) {
   const visible = filterProducts(category, filters);
   document.querySelector(`#${category}-grid`).innerHTML = visible.map(p => `
     <article class="product-card">
-      <button type="button" class="photo-button" data-product="${p.id}" aria-label="Подробнее: ${escapeHTML(p.name)}">
-        <span class="product-art" style="--image-position:${p.image}" aria-hidden="true"></span>
-        ${p.firmnessLabel ? `<span class="firmness">Жёсткость: ${p.firmnessLabel}</span>` : ''}
-      </button>
+      ${productPhotos(p)}
       <div class="product-info"><h3>${p.name}</h3><p class="product-meta">${p.summary}</p>
         <button type="button" class="details-button" data-product="${p.id}" aria-label="Подробнее о товаре: ${escapeHTML(p.name)}"><span>Подробнее</span>${icon('arrow')}</button>
       </div>
     </article>`).join('');
+  initProductPhotos(document.querySelector(`#${category}-grid`));
   const active = Object.values(filters).some(Boolean);
   const feedback = document.querySelector(`#${category}-feedback`);
   feedback.hidden = !active;
@@ -45,8 +45,8 @@ function openProduct(id, trigger) {
   document.querySelector('#dialog-category').textContent = p.category === 'bed' ? 'Кровати / MebelVia' : 'Матрасы / MebelVia';
   document.querySelector('#dialog-description').textContent = p.description;
   const photo = document.querySelector('#dialog-photo');
-  photo.innerHTML = `<span class="product-art" style="--image-position:${p.image}"></span>`;
-  photo.setAttribute('aria-label',p.name);
+  photo.innerHTML = productPhotos(p, true);
+  initProductPhotos(photo);
   document.querySelector('#dialog-specs').innerHTML = p.specs.map(([key,value]) => `<div><dt>${key}</dt><dd>${value}</dd></div>`).join('');
   sizeSelect.replaceChildren(...p.sizes.map(size => new Option(`${size} см`,size)));
   const filterSize = document.querySelector(`#${p.category}-filters [name="size"]`).value;
@@ -90,6 +90,7 @@ document.querySelector('#size-options').addEventListener('change', event => {
   }
 });
 document.querySelectorAll('[data-whatsapp]').forEach(link => link.href = whatsappUrl());
+initConsultationHint();
 
 document.querySelector('.delivery-link').addEventListener('click', () => {
   const details = document.querySelector('#delivery-details');
