@@ -84,3 +84,19 @@
   @media(max-width:430px){.hero{height:570px}.hero-image{height:335px}.hero-copy{padding-top:29px}.hero-actions{margin-top:19px}.hero h1{font-size:35px}.product-grid{grid-template-columns:1fr;gap:20px}.photo-button{aspect-ratio:4/3}.product-info{padding:18px 20px}.product-info h3{font-size:20px;min-height:0}.product-meta{font-size:14px;min-height:0;margin:9px 0 12px}.details-button{font-size:14px}.firmness{font-size:12px;left:12px;top:12px;padding:8px 11px;max-width:calc(100% - 24px)}.mattress-section .product-art{top:50%}.filter-feedback{font-size:12px}.hero-actions .button{padding:13px 14px;font-size:12px}}
   @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*:before,*:after{transition:none!important;animation:none!important}}
 }
+
+@layer responsive {
+  /* The header and hero share the first viewport; the catalog starts below it. */
+  :root{--site-header-height:97px}
+  .hero{
+    height:calc(100vh - var(--site-header-height));
+    height:calc(100dvh - var(--site-header-height));
+    min-height:420px;
+  }
+  @media(max-width:1100px){:root{--site-header-height:87px}}
+  @media(max-width:760px){
+    :root{--site-header-height:109px}
+    .hero{min-height:570px}
+    .hero-image{height:calc(100% - 200px);min-height:330px}
+  }
+}
