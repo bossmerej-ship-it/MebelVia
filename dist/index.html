@@ -8,7 +8,7 @@
   <meta name="robots" content="noindex, nofollow">
   <title>MebelVia — кровати и матрасы в Астане</title>
   <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
-  <link rel="preload" as="image" href="assets/bedroom.webp" fetchpriority="high">
+  <link rel="preload" as="image" href="assets/catalog/tatlin.jpg" fetchpriority="high">
   <link rel="stylesheet" href="styles.css">
   <script src="app.js" type="module"></script>
 </head>
@@ -37,7 +37,7 @@
   </header>
   <main id="top">
     <section class="hero" aria-labelledby="hero-title">
-      <img class="hero-image" src="assets/bedroom.webp" alt="Светлая спальня с мягкой бежевой кроватью" width="1942" height="809" fetchpriority="high">
+      <img class="hero-image" src="assets/catalog/tatlin.jpg" alt="Мягкая кровать Татлин в интерьере" width="698" height="699" fetchpriority="high">
       <div class="hero-inner container">
         <div class="hero-copy">
           <h1 id="hero-title">Кровати и матрасы<br>в Астане</h1>
@@ -54,8 +54,8 @@
         <h2 id="beds-title">Кровати</h2>
         <form id="bed-filters" class="filters" aria-label="Фильтры кроватей">
           <label class="select-wrap"><span class="sr-only">Размер кровати</span><select name="size" aria-label="Размер кровати"><option value="">Размер</option><option value="140×200">140×200 см</option><option value="160×200">160×200 см</option><option value="180×200">180×200 см</option></select><svg class="icon"><use href="#i-chevron"/></svg></label>
-          <label class="select-wrap"><span class="sr-only">Механизм кровати</span><select name="mechanism" aria-label="Механизм кровати"><option value="">Механизм</option><option value="lift">Подъёмный</option><option value="none">Без механизма</option></select><svg class="icon"><use href="#i-chevron"/></svg></label>
-          <label class="select-wrap"><span class="sr-only">Цвет кровати</span><select name="color" aria-label="Цвет кровати"><option value="">Цвет</option><option value="beige">Бежевый</option><option value="olive">Оливковый</option></select><svg class="icon"><use href="#i-chevron"/></svg></label>
+          <label class="select-wrap"><span class="sr-only">Механизм кровати</span><select name="mechanism" aria-label="Механизм кровати"><option value="">Механизм</option><option value="lift">Подъёмный</option><option value="unknown">Уточняется</option></select><svg class="icon"><use href="#i-chevron"/></svg></label>
+          <label class="select-wrap"><span class="sr-only">Модель кровати</span><select name="id" aria-label="Модель кровати"><option value="">Модель</option><option value="tatlin">Татлин</option><option value="milano">Milano</option><option value="monika">Monika</option></select><svg class="icon"><use href="#i-chevron"/></svg></label>
         </form>
       </div>
       <div class="filter-feedback" id="bed-feedback" hidden><span aria-live="polite"></span><button type="button" data-reset="bed">Сбросить фильтры</button></div>
@@ -69,11 +69,11 @@
         <p>Мягкие формы, спокойные оттенки и уютные фактуры. Начните с кровати — главного места для отдыха.</p>
         <a class="collection-link" href="#beds">Посмотреть кровати<svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></a>
       </div>
-      <img class="collection-image" src="assets/bedroom.webp" alt="Мягкая бежевая кровать в спальне с натуральными оттенками" width="1942" height="809" loading="lazy" decoding="async">
+      <img class="collection-image" src="assets/catalog/tatlin.jpg" alt="Кровать Татлин с мягким изголовьем" width="698" height="699" loading="lazy" decoding="async">
     </section>
     <section id="mattresses" class="catalog mattress-section container" aria-labelledby="mattresses-title">
       <div class="section-heading">
-        <div><h2 id="mattresses-title">Матрасы</h2><p class="section-subtitle">Выберите комфортную жёсткость</p></div>
+        <div><h2 id="mattresses-title">Матрасы</h2><p class="section-subtitle">Примеры для подбора. Характеристики уточните у консультанта.</p></div>
         <form id="mattress-filters" class="filters" aria-label="Фильтры матрасов">
           <label class="select-wrap"><span class="sr-only">Размер матраса</span><select name="size" aria-label="Размер матраса"><option value="">Размер</option><option value="90×200">90×200 см</option><option value="140×200">140×200 см</option><option value="160×200">160×200 см</option><option value="180×200">180×200 см</option></select><svg class="icon"><use href="#i-chevron"/></svg></label>
           <label class="select-wrap"><span class="sr-only">Жёсткость матраса</span><select name="firmness" aria-label="Жёсткость матраса"><option value="">Жёсткость</option><option value="low">Низкая</option><option value="medium">Средняя</option><option value="high">Высокая</option></select><svg class="icon"><use href="#i-chevron"/></svg></label>
@@ -115,7 +115,7 @@
       <a class="social-link" href="https://www.instagram.com/mebelvia.kz/" target="_blank" rel="noopener noreferrer"><svg class="icon" aria-hidden="true"><use href="#i-instagram"/></svg>Мы в Instagram</a>
       <a class="social-link telegram" href="https://t.me/mebelviakz" target="_blank" rel="noopener noreferrer"><svg class="icon" aria-hidden="true"><use href="#i-telegram"/></svg>Telegram-канал</a>
     </nav>
-    <p class="demo-note">Демонстрационный каталог.<br>Фото и характеристики — примеры.</p>
+    <p class="demo-note">Стоимость и комплектацию<br>уточняйте у консультанта.</p>
   </footer>
   <aside id="whatsapp-hint" class="whatsapp-hint" aria-label="Помощь с выбором" hidden>
     <button type="button" class="hint-close" aria-label="Закрыть подсказку"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button>
@@ -133,7 +133,7 @@
       <select id="product-size" name="product-size" hidden aria-label="Размер спального места"></select>
       <a id="product-whatsapp" class="button button-whatsapp" href="https://wa.me/77016000330" target="_blank" rel="noopener noreferrer"><svg class="icon" aria-hidden="true"><use href="#i-whatsapp"/></svg>Написать в WhatsApp</a>
       <p class="draft-note">Откроется WhatsApp с готовым текстом. Отправку подтверждаете вы.</p>
-      <p class="sample-note">Пример для просмотра дизайна. Фото, размеры и характеристики не являются подтверждённым ассортиментом. Стоимость и доступность уточняются у консультанта.</p>
+      <p class="sample-note">Стоимость и комплектацию уточните у консультанта.</p>
     </div></div>
   </dialog>
   <noscript><p class="noscript">Для просмотра каталога и фильтров включите JavaScript. Связаться с магазином можно по телефону +7 701 600 03 30.</p></noscript>

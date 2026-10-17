@@ -1,17 +1,18 @@
 const escapeHTML = value => String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
 export function productPhotos(product, inDialog = false) {
+  if (!product.image) return '';
   const name = escapeHTML(product.name);
   const tag = inDialog ? 'div' : 'button';
-  const action = inDialog ? `role="img" aria-label="${name}"` : `type="button" data-product="${product.id}" aria-label="Подробнее: ${name}"`;
-  return `<div class="product-media" data-gallery>
+  const action = inDialog ? '' : `type="button" data-product="${product.id}" aria-label="Подробнее: ${name}"`;
+  const alternate = product.alternateImage;
+  return `<div class="product-media"${alternate ? ' data-gallery' : ''}>
     <${tag} class="photo-button" ${action}>
-      <span class="product-art" style="--image-position:${product.image}" aria-hidden="true"></span>
-      <img class="product-secondary" data-src="assets/${product.id}-alternate.webp" alt="" width="768" height="768" decoding="async">
-      ${!inDialog && product.firmnessLabel ? `<span class="firmness">Жёсткость: ${escapeHTML(product.firmnessLabel)}</span>` : ''}
+      <img class="product-photo" src="${escapeHTML(product.image)}" alt="${escapeHTML(product.imageAlt || product.name)}" ${inDialog ? '' : 'loading="lazy"'} decoding="async" style="object-position:${escapeHTML(inDialog ? 'center' : product.imagePosition || 'center')}">
+      ${alternate ? `<img class="product-secondary" data-src="${escapeHTML(alternate)}" alt="" decoding="async">` : ''}
     </${tag}>
-    <button type="button" class="photo-toggle" aria-label="Второе фото: ${name}" aria-pressed="false"><span class="photo-count" aria-hidden="true">1 / 2</span><svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></button>
-    <span class="photo-feedback" role="status" hidden>Фото не загрузилось. Нажмите на стрелку ещё раз.</span>
+    ${alternate ? `<button type="button" class="photo-toggle" aria-label="Второе фото: ${name}" aria-pressed="false"><span class="photo-count" aria-hidden="true">1 / 2</span><svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></button>
+    <span class="photo-feedback" role="status" hidden>Фото не загрузилось. Нажмите на стрелку ещё раз.</span>` : ''}
   </div>`;
 }
 

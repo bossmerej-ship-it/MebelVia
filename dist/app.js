@@ -21,9 +21,10 @@ function renderCategory(category) {
   const filters = Object.fromEntries(new FormData(form));
   const visible = filterProducts(category, filters);
   document.querySelector(`#${category}-grid`).innerHTML = visible.map(p => `
-    <article class="product-card">
+    <article class="product-card${p.image ? '' : ' product-card-text'}">
       ${productPhotos(p)}
-      <div class="product-info"><h3>${p.name}</h3><p class="product-meta">${p.summary}</p>
+      <div class="product-info">${p.firmnessLabel ? `<span class="firmness">Жёсткость: ${escapeHTML(p.firmnessLabel)}</span>` : ''}<h3>${p.name}</h3><p class="product-meta">${p.summary}</p>
+        ${p.isExample ? '<p class="product-example">Пример для подбора</p>' : ''}
         <button type="button" class="details-button" data-product="${p.id}" aria-label="Подробнее о товаре: ${escapeHTML(p.name)}"><span>Подробнее</span>${icon('arrow')}</button>
       </div>
     </article>`).join('');
@@ -45,8 +46,13 @@ function openProduct(id, trigger) {
   document.querySelector('#dialog-category').textContent = p.category === 'bed' ? 'Кровати / MebelVia' : 'Матрасы / MebelVia';
   document.querySelector('#dialog-description').textContent = p.description;
   const photo = document.querySelector('#dialog-photo');
+  photo.hidden = !p.image;
   photo.innerHTML = productPhotos(p, true);
   initProductPhotos(photo);
+  dialog.classList.toggle('product-dialog-text', !p.image);
+  document.querySelector('.sample-note').textContent = p.isExample
+    ? 'Характеристики матрасов приведены для примера. Доступные модели, размеры и стоимость уточните у консультанта.'
+    : 'Стоимость, обивку и состав комплекта уточните у консультанта. Матрас и другие предметы на фото могут не входить в комплект.';
   document.querySelector('#dialog-specs').innerHTML = p.specs.map(([key,value]) => `<div><dt>${key}</dt><dd>${value}</dd></div>`).join('');
   sizeSelect.replaceChildren(...p.sizes.map(size => new Option(`${size} см`,size)));
   const filterSize = document.querySelector(`#${p.category}-filters [name="size"]`).value;
