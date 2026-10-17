@@ -18,7 +18,7 @@ enhanceFilters();
 
 function renderCategory(category) {
   const form = document.querySelector(`#${category}-filters`);
-  const filters = Object.fromEntries(new FormData(form));
+  const filters = form ? Object.fromEntries(new FormData(form)) : {};
   const visible = filterProducts(category, filters);
   document.querySelector(`#${category}-grid`).innerHTML = visible.map(p => `
     <article class="product-card${p.image ? '' : ' product-card-text'}">
@@ -29,6 +29,7 @@ function renderCategory(category) {
       </div>
     </article>`).join('');
   initProductPhotos(document.querySelector(`#${category}-grid`));
+  if (!form) return;
   const active = Object.values(filters).some(Boolean);
   const feedback = document.querySelector(`#${category}-feedback`);
   feedback.hidden = !active;
@@ -55,7 +56,7 @@ function openProduct(id, trigger) {
     : 'Стоимость, обивку и состав комплекта уточните у консультанта. Матрас и другие предметы на фото могут не входить в комплект.';
   document.querySelector('#dialog-specs').innerHTML = p.specs.map(([key,value]) => `<div><dt>${key}</dt><dd>${value}</dd></div>`).join('');
   sizeSelect.replaceChildren(...p.sizes.map(size => new Option(`${size} см`,size)));
-  const filterSize = document.querySelector(`#${p.category}-filters [name="size"]`).value;
+  const filterSize = document.querySelector(`#${p.category}-filters [name="size"]`)?.value;
   if (p.sizes.includes(filterSize)) sizeSelect.value = filterSize;
   document.querySelector('#size-options').innerHTML = p.sizes.map(size => `<label class="size-option"><input type="radio" name="model-size" value="${size}" ${size === sizeSelect.value ? 'checked' : ''}><span>${size}<small>см</small></span></label>`).join('');
   updateDraft();
@@ -66,8 +67,8 @@ function updateDraft() {
 }
 for (const category of ['bed','mattress']) {
   renderCategory(category);
-  document.querySelector(`#${category}-filters`).addEventListener('change',() => renderCategory(category));
-  document.querySelector(`#${category}-filters`).addEventListener('submit',event => event.preventDefault());
+  document.querySelector(`#${category}-filters`)?.addEventListener('change',() => renderCategory(category));
+  document.querySelector(`#${category}-filters`)?.addEventListener('submit',event => event.preventDefault());
 }
 document.addEventListener('click',event => {
   const trigger = event.target.closest('[data-product]');

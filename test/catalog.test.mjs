@@ -15,14 +15,15 @@ test('both sides of a two-sided mattress can be found by firmness',() => {
   assert.equal(filterProducts('mattress',{size:'180×200',type:'topper'}).length,0);
 });
 
-test('catalogue photographs are shown only for beds, without a second-photo control unless supplied',() => {
+test('catalogue photographs are shown for beds and mattresses, without a second-photo control unless supplied',() => {
   const bed = products.find(p => p.id === 'milano');
   const mattress = products.find(p => p.category === 'mattress');
   const markup = productPhotos(bed);
   assert.ok(markup.includes('src="assets/catalog/milano.jpg"'));
   assert.ok(!markup.includes('photo-toggle'));
-  assert.equal(productPhotos(mattress),'');
-  assert.equal(productPhotos(mattress,true),'');
+  assert.ok(productPhotos(mattress).includes('src="assets/spring-mattress-alternate.webp"'));
+  assert.ok(productPhotos(mattress,true).includes('src="assets/spring-mattress-alternate.webp"'));
+  assert.ok(!productPhotos(mattress).includes('photo-toggle'));
   const gallery = productPhotos({...bed,alternateImage:'assets/catalog/milano-detail.jpg'});
   assert.ok(gallery.includes('data-src="assets/catalog/milano-detail.jpg"'));
   assert.ok(gallery.includes('photo-toggle'));

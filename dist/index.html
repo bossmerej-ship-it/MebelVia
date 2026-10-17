@@ -8,7 +8,7 @@
   <meta name="robots" content="noindex, nofollow">
   <title>MebelVia — кровати и матрасы в Астане</title>
   <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
-  <link rel="preload" as="image" href="assets/catalog/tatlin.jpg" fetchpriority="high">
+  <link rel="preload" as="image" href="assets/catalog/violetta.svg" fetchpriority="high">
   <link rel="stylesheet" href="styles.css">
   <script src="app.js" type="module"></script>
 </head>
@@ -37,7 +37,7 @@
   </header>
   <main id="top">
     <section class="hero" aria-labelledby="hero-title">
-      <img class="hero-image" src="assets/catalog/tatlin.jpg" alt="Мягкая кровать Татлин в интерьере" width="698" height="699" fetchpriority="high">
+      <img class="hero-image" src="assets/catalog/violetta.svg" alt="Коричневая кровать Виолетта с высоким изголовьем" width="1275" height="849" fetchpriority="high">
       <div class="hero-inner container">
         <div class="hero-copy">
           <h1 id="hero-title">Кровати и матрасы<br>в Астане</h1>
@@ -53,36 +53,27 @@
       <div class="section-heading">
         <h2 id="beds-title">Кровати</h2>
         <form id="bed-filters" class="filters" aria-label="Фильтры кроватей">
-          <label class="select-wrap"><span class="sr-only">Размер кровати</span><select name="size" aria-label="Размер кровати"><option value="">Размер</option><option value="140×200">140×200 см</option><option value="160×200">160×200 см</option><option value="180×200">180×200 см</option></select><svg class="icon"><use href="#i-chevron"/></svg></label>
-          <label class="select-wrap"><span class="sr-only">Механизм кровати</span><select name="mechanism" aria-label="Механизм кровати"><option value="">Механизм</option><option value="lift">Подъёмный</option><option value="unknown">Уточняется</option></select><svg class="icon"><use href="#i-chevron"/></svg></label>
-          <label class="select-wrap"><span class="sr-only">Модель кровати</span><select name="id" aria-label="Модель кровати"><option value="">Модель</option><option value="tatlin">Татлин</option><option value="milano">Milano</option><option value="monika">Monika</option></select><svg class="icon"><use href="#i-chevron"/></svg></label>
+          <label class="select-wrap"><span class="sr-only">Модель кровати</span><select name="id" aria-label="Модель кровати"><option value="">Модель</option><option value="violetta">Виолетта</option><option value="hanna">Hanna</option><option value="konor">Конор</option></select><svg class="icon"><use href="#i-chevron"/></svg></label>
         </form>
       </div>
       <div class="filter-feedback" id="bed-feedback" hidden><span aria-live="polite"></span><button type="button" data-reset="bed">Сбросить фильтры</button></div>
       <div id="bed-grid" class="product-grid"></div>
-      <div id="bed-empty" class="empty-state" hidden><h3>Подходящих кроватей пока нет</h3><p>Попробуйте другой размер или уберите один из фильтров.</p><button class="button button-quiet" data-reset="bed">Сбросить фильтры</button></div>
+      <div id="bed-empty" class="empty-state" hidden><h3>Подходящих кроватей пока нет</h3><p>Выберите другую модель или сбросьте фильтр.</p><button class="button button-quiet" data-reset="bed">Сбросить фильтры</button></div>
     </section>
     <section class="collection-section container" aria-labelledby="collection-title">
       <div class="collection-copy">
         <span class="eyebrow">Коллекция для вдохновения</span>
-        <h2 id="collection-title">Спальня<br>в тёплых тонах</h2>
+        <h2 id="collection-title">Мягкие формы<br>для вашей спальни</h2>
         <p>Мягкие формы, спокойные оттенки и уютные фактуры. Начните с кровати — главного места для отдыха.</p>
         <a class="collection-link" href="#beds">Посмотреть кровати<svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></a>
       </div>
-      <img class="collection-image" src="assets/catalog/tatlin.jpg" alt="Кровать Татлин с мягким изголовьем" width="698" height="699" loading="lazy" decoding="async">
+      <img class="collection-image" src="assets/catalog/hanna.svg" alt="Белая кровать Hanna с мягким округлённым изголовьем" width="1230" height="851" loading="lazy" decoding="async">
     </section>
     <section id="mattresses" class="catalog mattress-section container" aria-labelledby="mattresses-title">
       <div class="section-heading">
         <div><h2 id="mattresses-title">Матрасы</h2><p class="section-subtitle">Примеры для подбора. Характеристики уточните у консультанта.</p></div>
-        <form id="mattress-filters" class="filters" aria-label="Фильтры матрасов">
-          <label class="select-wrap"><span class="sr-only">Размер матраса</span><select name="size" aria-label="Размер матраса"><option value="">Размер</option><option value="90×200">90×200 см</option><option value="140×200">140×200 см</option><option value="160×200">160×200 см</option><option value="180×200">180×200 см</option></select><svg class="icon"><use href="#i-chevron"/></svg></label>
-          <label class="select-wrap"><span class="sr-only">Жёсткость матраса</span><select name="firmness" aria-label="Жёсткость матраса"><option value="">Жёсткость</option><option value="low">Низкая</option><option value="medium">Средняя</option><option value="high">Высокая</option></select><svg class="icon"><use href="#i-chevron"/></svg></label>
-          <label class="select-wrap"><span class="sr-only">Тип матраса</span><select name="type" aria-label="Тип матраса"><option value="">Тип</option><option value="spring">Пружинный</option><option value="foam">Беспружинный</option><option value="topper">Топпер</option></select><svg class="icon"><use href="#i-chevron"/></svg></label>
-        </form>
       </div>
-      <div class="filter-feedback" id="mattress-feedback" hidden><span aria-live="polite"></span><button type="button" data-reset="mattress">Сбросить фильтры</button></div>
       <div id="mattress-grid" class="product-grid"></div>
-      <div id="mattress-empty" class="empty-state" hidden><h3>С такими параметрами ничего не найдено</h3><p>Попробуйте изменить жёсткость или тип матраса.</p><button class="button button-quiet" data-reset="mattress">Сбросить фильтры</button></div>
     </section>
     <section class="delivery-section" aria-labelledby="delivery-title">
       <div class="delivery-inner container">
