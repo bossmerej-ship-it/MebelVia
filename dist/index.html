@@ -8,9 +8,13 @@
   <meta name="robots" content="noindex, nofollow">
   <title>MebelVia — кровати и матрасы в Астане</title>
   <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+  <link rel="preload" href="assets/fonts/cera-pro-regular.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="assets/fonts/cera-pro-bold.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" as="image" href="assets/catalog/violetta.svg" fetchpriority="high">
   <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="bed-viewer.css">
   <script src="app.js" type="module"></script>
+  <script src="bed-viewer.js" type="module"></script>
 </head>
 <body>
   <svg class="icon-library" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs>
@@ -37,7 +41,32 @@
   </header>
   <main id="top">
     <section class="hero" aria-labelledby="hero-title">
-      <img class="hero-image" src="assets/catalog/violetta.svg" alt="Коричневая кровать Виолетта с высоким изголовьем" width="1275" height="849" fetchpriority="high">
+      <div class="bed-stage" data-state="loading" aria-label="Рассмотрите кровать со всех сторон">
+        <img class="bed-photo" src="assets/catalog/violetta.svg" alt="Коричневая кровать Виолетта с высоким изголовьем" width="1275" height="849" fetchpriority="high">
+        <model-viewer id="hero-bed" src="assets/models/violetta.glb"
+          alt="3D-эскиз коричневой кровати с высоким мягким изголовьем, белым бельём и серым пледом."
+          camera-controls touch-action="pan-y" orbit-sensitivity="0.65" disable-zoom disable-pan
+          camera-orbit="-38deg 72deg 5.7m" camera-target="0m 0.72m 0m"
+          min-camera-orbit="auto 35deg auto" max-camera-orbit="auto 85deg auto"
+          field-of-view="30deg" shadow-intensity="0.7" shadow-softness="1"
+          exposure="0.9" interaction-prompt="none" loading="eager"
+          aria-describedby="bed-hint" tabindex="0">
+          <span slot="progress-bar"></span>
+        </model-viewer>
+        <div class="bed-tools" hidden>
+          <p class="bed-hint" id="bed-hint">Потяните, чтобы повернуть · 3D-эскиз</p>
+          <div class="bed-controls" role="group" aria-label="Вид кровати">
+            <button type="button" class="bed-mode" data-bed-view="model" aria-pressed="true">3D</button>
+            <button type="button" class="bed-mode" data-bed-view="photo" aria-pressed="false">Фото</button>
+            <span class="bed-controls-divider" aria-hidden="true"></span>
+            <button type="button" class="bed-reset" aria-label="Вернуть исходный ракурс" title="Вернуть исходный ракурс">
+              <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10a9 9 0 1 1 2 8M3 4v6h6"/></svg>
+            </button>
+          </div>
+        </div>
+        <p class="bed-loading" role="status" hidden>Загружаем 3D…</p>
+        <button class="bed-retry" type="button" hidden>Повторить загрузку 3D</button>
+      </div>
       <div class="hero-inner container">
         <div class="hero-copy">
           <h1 id="hero-title">Кровати и матрасы<br>в Астане</h1>
