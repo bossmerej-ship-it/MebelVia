@@ -56,6 +56,7 @@ function openProduct(id, trigger) {
     : 'Стоимость, обивку и состав комплекта уточните у консультанта. Матрас и другие предметы на фото могут не входить в комплект.';
   document.querySelector('#dialog-specs').innerHTML = p.specs.map(([key,value]) => `<div><dt>${key}</dt><dd>${value}</dd></div>`).join('');
   sizeSelect.replaceChildren(...p.sizes.map(size => new Option(`${size} см`,size)));
+  document.querySelector('.size-picker').hidden = p.sizes.length === 0;
   const filterSize = document.querySelector(`#${p.category}-filters [name="size"]`)?.value;
   if (p.sizes.includes(filterSize)) sizeSelect.value = filterSize;
   document.querySelector('#size-options').innerHTML = p.sizes.map(size => `<label class="size-option"><input type="radio" name="model-size" value="${size}" ${size === sizeSelect.value ? 'checked' : ''}><span>${size}<small>см</small></span></label>`).join('');
