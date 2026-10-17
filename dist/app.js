@@ -1,5 +1,4 @@
-import { products, filterProducts, whatsappUrl } from './catalog.js';
-import { enhanceFilters, syncFilters, focusFirstFilter } from './filters.js';
+import { products, whatsappUrl } from './catalog.js';
 import { productPhotos, initProductPhotos } from './product-photos.js';
 import { initConsultationHint } from './consultation-hint.js';
 
@@ -14,12 +13,8 @@ const dialog = document.querySelector('#product-dialog');
 const sizeSelect = document.querySelector('#product-size');
 let selectedProduct;
 let lastTrigger;
-enhanceFilters();
-
 function renderCategory(category) {
-  const form = document.querySelector(`#${category}-filters`);
-  const filters = form ? Object.fromEntries(new FormData(form)) : {};
-  const visible = filterProducts(category, filters);
+  const visible = products.filter(product => product.category === category);
   document.querySelector(`#${category}-grid`).innerHTML = visible.map(p => `
     <article class="product-card${p.image ? '' : ' product-card-text'}">
       ${productPhotos(p)}
@@ -29,13 +24,6 @@ function renderCategory(category) {
       </div>
     </article>`).join('');
   initProductPhotos(document.querySelector(`#${category}-grid`));
-  if (!form) return;
-  const active = Object.values(filters).some(Boolean);
-  const feedback = document.querySelector(`#${category}-feedback`);
-  feedback.hidden = !active;
-  feedback.querySelector('span').textContent = `Найдено: ${visible.length}`;
-  document.querySelector(`#${category}-empty`).hidden = visible.length > 0;
-  syncFilters(form);
 }
 
 function openProduct(id, trigger) {
@@ -57,8 +45,6 @@ function openProduct(id, trigger) {
   document.querySelector('#dialog-specs').innerHTML = p.specs.map(([key,value]) => `<div><dt>${key}</dt><dd>${value}</dd></div>`).join('');
   sizeSelect.replaceChildren(...p.sizes.map(size => new Option(`${size} см`,size)));
   document.querySelector('.size-picker').hidden = p.sizes.length === 0;
-  const filterSize = document.querySelector(`#${p.category}-filters [name="size"]`)?.value;
-  if (p.sizes.includes(filterSize)) sizeSelect.value = filterSize;
   document.querySelector('#size-options').innerHTML = p.sizes.map(size => `<label class="size-option"><input type="radio" name="model-size" value="${size}" ${size === sizeSelect.value ? 'checked' : ''}><span>${size}<small>см</small></span></label>`).join('');
   updateDraft();
   dialog.showModal();
@@ -68,20 +54,10 @@ function updateDraft() {
 }
 for (const category of ['bed','mattress']) {
   renderCategory(category);
-  document.querySelector(`#${category}-filters`)?.addEventListener('change',() => renderCategory(category));
-  document.querySelector(`#${category}-filters`)?.addEventListener('submit',event => event.preventDefault());
 }
 document.addEventListener('click',event => {
   const trigger = event.target.closest('[data-product]');
   if (trigger) openProduct(trigger.dataset.product,trigger);
-  const reset = event.target.closest('[data-reset]');
-  if (reset) {
-    const category = reset.dataset.reset;
-    const form = document.querySelector(`#${category}-filters`);
-    form.reset();
-    renderCategory(category);
-    focusFirstFilter(form);
-  }
 });
 document.querySelector('.dialog-close').addEventListener('click',() => dialog.close());
 dialog.addEventListener('click',event => {

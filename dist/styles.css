@@ -19,6 +19,7 @@
   .product-dialog-text{width:min(560px,calc(100% - 48px))}
   .product-dialog-text .dialog-layout{grid-template-columns:1fr}
   .product-secondary{position:absolute;inset:0;width:100%;height:100%;padding:12px;object-fit:contain;object-position:center;opacity:0;transition:opacity .2s;pointer-events:none}
+  .product-media-mattress :is(.product-photo,.product-secondary){inset:50% auto auto 50%;width:auto;height:auto;max-width:calc(100% - 24px);max-height:calc(100% - 24px);padding:0;border-radius:16px;transform:translate(-50%,-50%)}
   .show-secondary .product-secondary{opacity:1}
   .photo-toggle{position:absolute;right:12px;bottom:12px;z-index:2;display:flex;align-items:center;justify-content:center;gap:10px;min-height:44px;min-width:78px;padding:8px 12px;border:1px solid #e5ded4;border-radius:24px;background:#fffaf2ed;color:#514b44;font-size:12px;font-variant-numeric:tabular-nums;box-shadow:0 2px 8px #372a1b08}
   .photo-toggle .icon{width:16px;height:16px}

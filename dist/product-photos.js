@@ -6,7 +6,7 @@ export function productPhotos(product, inDialog = false) {
   const tag = inDialog ? 'div' : 'button';
   const action = inDialog ? '' : `type="button" data-product="${product.id}" aria-label="Подробнее: ${name}"`;
   const alternate = product.alternateImage;
-  return `<div class="product-media"${alternate ? ' data-gallery' : ''}>
+  return `<div class="product-media${product.category === 'mattress' ? ' product-media-mattress' : ''}"${alternate ? ' data-gallery' : ''}>
     <${tag} class="photo-button" ${action}>
       <img class="product-photo" src="${escapeHTML(product.image)}" alt="${escapeHTML(product.imageAlt || product.name)}" ${inDialog ? '' : 'loading="lazy"'} decoding="async" style="object-position:${escapeHTML(inDialog ? 'center' : product.imagePosition || 'center')}">
       ${alternate ? `<img class="product-secondary" data-src="${escapeHTML(alternate)}" alt="" decoding="async">` : ''}
