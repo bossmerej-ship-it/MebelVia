@@ -1,34 +1,24 @@
-/* Kept separate from catalog styles: this component only owns the hero asset. */
+/* This component only owns the interactive hero asset. */
 .bed-stage{position:absolute;inset:0 0 0 39%;z-index:1;min-width:0}
-.bed-photo{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;padding:32px 32px 70px 0;transition:opacity .25s;pointer-events:none}
-#hero-bed{display:block;width:100%;height:calc(100% - 52px);background:transparent;opacity:0;pointer-events:none;touch-action:pan-y;--poster-color:transparent;transition:opacity .25s;cursor:grab}
+.bed-open{position:absolute;inset:0;width:100%;height:100%;padding:32px 32px 32px 0;border:0;background:transparent;cursor:grab;border-radius:16px;touch-action:pan-y}
+.bed-photo{display:block;width:100%;height:100%;object-fit:contain;pointer-events:none}
+.bed-open:focus-visible{outline:2px solid #f9800b;outline-offset:-10px}
+#hero-bed{display:block;width:100%;height:100%;background:transparent;opacity:0;pointer-events:none;touch-action:pan-y;--poster-color:transparent;transition:opacity .25s;cursor:grab}
 #hero-bed:active{cursor:grabbing}
 .bed-stage[data-state="model"] #hero-bed{opacity:1;pointer-events:auto}
-.bed-stage[data-state="model"] .bed-photo{opacity:0}
-.bed-tools{position:absolute;bottom:22px;left:0;width:100%;display:flex;align-items:center;flex-direction:column;gap:10px;pointer-events:none}
-.hero .bed-hint{margin:0;font-size:12px;line-height:1.4;letter-spacing:.01em;color:#706b66;text-align:center}
-.bed-controls{display:flex;align-items:center;gap:3px;padding:4px;border:1px solid #e8e2dd;background:#fff;border-radius:30px;box-shadow:0 3px 12px #49301c05;pointer-events:auto}
-.bed-controls button{display:grid;place-items:center;border:0;min-width:44px;height:36px;padding:0 14px;background:transparent;border-radius:22px;font-size:12px;color:#68615b;transition:background .15s,color .15s}
-.bed-controls button:hover{background:#f7f2ed;color:#242527}
-.bed-controls .bed-mode[aria-pressed="true"]{background:#f5e9dc;color:#6a4931;font-weight:600}
-.bed-controls-divider{height:16px;width:1px;margin-inline:3px;background:#e8e2dd}
-.bed-controls .bed-reset{padding:0;min-width:36px}
-.bed-reset .icon{width:16px;height:16px}
-.bed-controls button:disabled{opacity:.3}
-.bed-stage[data-state="photo"] #hero-bed,.bed-stage[data-state="error"] #hero-bed{visibility:hidden}
-.hero .bed-loading{position:absolute;bottom:30px;left:0;width:100%;font-size:12px;color:#706b66;text-align:center;margin:0}
-.bed-retry{position:absolute;bottom:22px;left:50%;transform:translateX(-50%);min-height:44px;white-space:nowrap;padding:10px 18px;border:1px solid #e8e2dd;border-radius:24px;background:#fff;font-size:12px}
-@media(max-width:1100px) and (min-width:761px){.bed-stage{left:40%;right:-2%}.bed-tools{bottom:20px}.hero .bed-hint{font-size:11px}}
+.bed-stage[data-state="photo"] #hero-bed{visibility:hidden}
+.bed-close{position:absolute;top:30px;right:30px;display:grid;place-items:center;width:44px;height:44px;padding:0;border:1px solid #e8e2dd;border-radius:50%;background:#ffffffed;color:#706b66;z-index:2}
+.bed-close:hover{background:#f6eee5;color:#242527}
+.bed-close .icon{width:18px;height:18px}
+.hero .bed-status{position:absolute;left:50%;bottom:22px;transform:translateX(-50%);width:max-content;max-width:90%;margin:0;padding:10px 16px;border-radius:18px;background:#fffffff0;color:#706b66;font-size:12px;line-height:1.5;text-align:center;pointer-events:none}
+.bed-stage [hidden]{display:none}
+@media(max-width:1100px) and (min-width:761px){.bed-stage{left:40%;right:-2%}}
 @media(max-width:760px){
-  .hero:has(.bed-stage){height:auto;min-height:calc(100svh - var(--site-header-height));display:flex;flex-direction:column}
+  .hero:has(.bed-stage){height:auto;min-height:100svh;display:flex;flex-direction:column}
   .hero:has(.bed-stage) .hero-inner{height:auto;order:0;flex:none}
   .hero:has(.bed-stage) .hero-copy{padding-bottom:0}
-  .bed-stage{position:relative;inset:auto;order:1;width:100%;min-height:330px;height:clamp(330px,calc(100svh - 330px),490px);flex:none}
-  #hero-bed{height:calc(100% - 62px)}
-  .bed-photo{padding:4px 10px 74px}
-  .bed-tools{bottom:14px;gap:7px}
-  .hero .bed-hint{font-size:11px}
-  .bed-controls button{height:40px;min-width:46px}
-  .bed-controls .bed-reset{min-width:44px}
+  .bed-stage{position:relative;inset:auto;order:1;width:100%;min-height:310px;height:clamp(310px,calc(100svh - 330px),450px);flex:none}
+  .bed-open{padding:4px 10px 20px}
+  .bed-close{top:4px;right:14px}
 }
-@media(prefers-reduced-motion:reduce){#hero-bed,.bed-photo,.bed-controls button{transition:none}}
+@media(prefers-reduced-motion:reduce){#hero-bed{transition:none}}

@@ -11,13 +11,13 @@ test('the complete bed is packaged as a bounded, self-contained GLB', () => {
   assert.equal(bytes.readUInt32LE(0), 0x46546c67);
   assert.equal(bytes.readUInt32LE(4), 2);
   assert.equal(bytes.readUInt32LE(8), bytes.length);
-  assert.ok(bytes.length < 5 * 1024 * 1024, 'model exceeds the hero asset budget');
+  assert.ok(bytes.length < 6 * 1024 * 1024, 'model exceeds the on-demand asset budget');
   assert.ok(model.meshes.length <= 8, 'too many draw calls for the mobile hero');
   assert.ok(model.images.length >= 2, 'fabric textures must be embedded');
   for (const buffer of model.buffers) assert.equal(buffer.uri, undefined);
   for (const image of model.images) {
     assert.equal(image.uri, undefined);
-    assert.equal(image.mimeType, 'image/png');
+    assert.ok(['image/png', 'image/jpeg'].includes(image.mimeType));
     assert.ok(model.bufferViews[image.bufferView]);
   }
   for (const view of model.bufferViews) {

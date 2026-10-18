@@ -10,7 +10,8 @@
   },
   "devDependencies": {
     "@google/model-viewer": "4.4.0",
+    "pngjs": "7.0.0",
     "three": "0.183.2",
-    "pngjs": "7.0.0"
+    "three-mesh-bvh": "0.9.16"
   }
 }

@@ -2,11 +2,6 @@ import { products, whatsappUrl } from './catalog.js';
 import { productPhotos, initProductPhotos } from './product-photos.js';
 import { initConsultationHint } from './consultation-hint.js';
 
-const siteHeader = document.querySelector('.site-header');
-const fitFirstScreen = () => document.documentElement.style.setProperty('--site-header-height', `${siteHeader.getBoundingClientRect().height}px`);
-fitFirstScreen();
-new ResizeObserver(fitFirstScreen).observe(siteHeader);
-
 const icon = id => `<svg class="icon" aria-hidden="true"><use href="#i-${id}"/></svg>`;
 const escapeHTML = value => String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const dialog = document.querySelector('#product-dialog');
