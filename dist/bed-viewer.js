@@ -79,10 +79,12 @@ async function openModel() {
     if (!requested) return;
     viewer.cameraOrbit = initialOrbit;
     viewer.jumpCameraToGoal();
-    if (failed || !viewer.hasAttribute('src')) {
+    if (viewer.loaded && !failed) {
+      modelReady();
+    } else if (failed || !viewer.hasAttribute('src')) {
       // Failed asset promises are cached by the viewer: a retry needs a new URL.
-      viewer.src = viewer.dataset.src + (failed ? `?retry=${++assetAttempt}` : '');
-    } else if (viewer.loaded) modelReady();
+      viewer.setAttribute('src', viewer.dataset.src + (failed ? `?retry=${++assetAttempt}` : ''));
+    }
   } catch {
     modelUnavailable();
   }
