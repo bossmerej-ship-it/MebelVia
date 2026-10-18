@@ -2,3 +2,5 @@ node_modules/
 .DS_Store
 *.log
 .openai/local/
+# Optional Blender working scene; the compact mesh cache is tracked instead.
+scripts/materials/bed-cloth.blend*
