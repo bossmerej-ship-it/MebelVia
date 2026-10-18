@@ -172,7 +172,7 @@
 
 @layer responsive {
   /* The logo belongs to the hero; the catalog starts below the first viewport. */
-  .hero-copy .logo{margin-bottom:28px}
+  .hero-logo{position:absolute;top:max(24px,env(safe-area-inset-top,0px));left:max(24px,env(safe-area-inset-left,0px));z-index:3}
   .hero{
     height:100vh;
     height:100dvh;
@@ -186,7 +186,8 @@
     .hero-image{left:40%;width:60%;padding:32px 32px 32px 0}
   }
   @media(max-width:760px){
-    .hero-copy .logo{margin-bottom:24px}
+    .hero-logo{top:max(16px,env(safe-area-inset-top,0px));left:max(16px,env(safe-area-inset-left,0px))}
+    .hero-copy{padding-top:106px}
     .floating-whatsapp{right:calc(16px + env(safe-area-inset-right,0px));bottom:calc(16px + env(safe-area-inset-bottom,0px));width:58px;height:58px;padding:0}
     .floating-whatsapp .icon{width:29px;height:29px}
     .site-footer{padding-bottom:96px}
