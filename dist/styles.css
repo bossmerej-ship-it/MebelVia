@@ -21,7 +21,7 @@
   font-display: swap;
 }
 @layer components {
-  .collection-section{display:grid;grid-template-columns:.85fr 1.15fr;min-height:100vh;min-height:100dvh;margin-top:56px;background:#fff;border-radius:var(--radius);overflow:hidden}
+  .collection-section{display:grid;grid-template-columns:.85fr 1.15fr;min-height:100vh;min-height:100dvh;margin-top:56px;background:#fff;overflow:hidden}
   .collection-copy{align-self:center;padding:48px clamp(28px,4vw,60px)}
   .collection-copy .eyebrow{display:block;margin-bottom:19px}
   .collection-copy h2{font-size:clamp(30px,3.2vw,46px);line-height:1.08;letter-spacing:-.04em;font-weight:600}
