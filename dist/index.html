@@ -10,7 +10,7 @@
   <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
   <link rel="preload" href="assets/fonts/cera-pro-regular.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="assets/fonts/cera-pro-bold.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="preload" as="image" href="assets/catalog/violetta.svg" fetchpriority="high">
+  <link rel="preload" as="image" href="assets/hero-headboard.webp" fetchpriority="high">
   <link rel="stylesheet" href="styles.css">
   <link rel="stylesheet" href="bed-viewer.css">
   <script src="app.js" type="module"></script>
@@ -33,15 +33,14 @@
   <a class="skip-link" href="#beds">Перейти к каталогу</a>
   <main id="top">
     <section class="hero" aria-labelledby="hero-title">
-      <a class="logo hero-logo" href="#top" aria-label="MebelVia — на главную"><span>Mebel<br>Via.kz</span></a>
       <div class="bed-stage" data-state="photo" aria-label="Рассмотрите кровать со всех сторон">
         <button class="bed-open" type="button" aria-label="Рассмотреть кровать Виолетта в 3D" title="Рассмотреть в 3D" aria-controls="hero-bed">
-          <img class="bed-photo" src="assets/catalog/violetta.svg" alt="Коричневая кровать Виолетта с высоким изголовьем" width="1275" height="849" fetchpriority="high">
+          <img class="bed-photo" src="assets/hero-headboard.webp" alt="Кровать Виолетта спереди: коричневое мягкое изголовье, белые подушки и постель" width="1536" height="1024" fetchpriority="high">
         </button>
         <model-viewer id="hero-bed" data-src="assets/models/violetta.glb"
           alt="Кровать Виолетта в 3D. Поворачивайте мышью, пальцем или клавишами со стрелками."
           camera-controls touch-action="pan-y" orbit-sensitivity="0.65" disable-zoom disable-pan
-          camera-orbit="-32deg 82deg 105%" camera-target="0m 0.72m 0m"
+          camera-orbit="0deg 82deg 105%" camera-target="0m 0.72m 0m"
           min-camera-orbit="auto 35deg auto" max-camera-orbit="auto 85deg auto"
           field-of-view="30deg" shadow-intensity="0.6" shadow-softness="1"
           environment-image="assets/models/studio-small-09.hdr" exposure="0.85" tone-mapping="aces" interaction-prompt="none" loading="eager"
@@ -53,8 +52,8 @@
       </div>
       <div class="hero-inner container">
         <div class="hero-copy">
+          <a class="logo hero-logo" href="#top" aria-label="MebelVia — на главную"><span>Mebel<br>Via.kz</span></a>
           <h1 id="hero-title">Кровати и матрасы<br>в Астане</h1>
-          <p>Найдите основу вашей спальни</p>
           <div class="hero-actions">
             <a class="button button-orange" href="#beds">Выбрать кровать<svg class="icon"><use href="#i-arrow"/></svg></a>
             <a class="button button-quiet" href="#mattresses">Выбрать матрас<svg class="icon"><use href="#i-arrow"/></svg></a>
