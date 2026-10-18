@@ -18,13 +18,25 @@
 .hero-actions .button-quiet:hover{background:#fffaf21f}
 .hero-actions .icon{display:block;width:24px;height:24px}
 .hero :is(.hero-logo,.button):focus-visible{outline:3px solid #fffaf2;outline-offset:5px}
-#hero-bed{display:block;width:100%;height:100%;background:#f7f5f1;opacity:0;pointer-events:none;touch-action:pan-y;--poster-color:transparent;transition:opacity .25s;cursor:grab}
+#hero-bed{position:absolute;top:4%;left:32%;display:block;width:68%;height:85%;background:transparent;opacity:0;pointer-events:none;touch-action:pan-y;--poster-color:transparent;transition:opacity .25s;cursor:grab}
 #hero-bed:active{cursor:grabbing}
 .bed-stage[data-state="model"] #hero-bed{opacity:1;pointer-events:auto}
 .bed-stage[data-state="photo"] #hero-bed{visibility:hidden}
+.bed-stage[data-state="model"]{background:radial-gradient(ellipse at 65% 48%,#fff 0%,#f4f4f3 62%,#ebebea 100%)}
+.bed-details{display:none;position:absolute;left:5.5%;top:50%;transform:translateY(-50%);width:28%;pointer-events:none;color:#252831}
+.bed-details h2{margin:0;font-size:clamp(36px,5.1vw,84px);line-height:1.04;letter-spacing:-.045em}
+.bed-details h2 span,.bed-details h2 strong{display:block}
+.bed-details h2 span{font-weight:400}
+.bed-details h2 strong{font-weight:700}
+.hero .bed-rotate-hint{display:none;position:absolute;left:32%;bottom:5%;width:68%;margin:0;flex-direction:column;align-items:center;gap:9px;font-size:16px;line-height:1.4;color:#666972;pointer-events:none;text-align:center}
+.bed-rotate-hint svg{width:40px;height:32px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.bed-stage[data-state="model"] .bed-details{display:block}
+.bed-stage[data-state="model"] .bed-rotate-hint{display:flex}
 .hero:has(.bed-stage[data-state="model"]) .hero-inner{visibility:hidden}
-.bed-close{position:absolute;top:max(24px,env(safe-area-inset-top,0px));right:max(24px,env(safe-area-inset-right,0px));display:grid;place-items:center;width:48px;height:48px;padding:0;border:1px solid #e8e2dd;border-radius:50%;background:#fffffff2;color:#514237;z-index:4;cursor:pointer}
-.bed-close:hover{background:#f6eee5;color:#242527}
+.bed-close{position:absolute;top:max(24px,env(safe-area-inset-top,0px));right:max(24px,env(safe-area-inset-right,0px));display:flex;align-items:center;gap:12px;min-height:48px;padding:0;border:0;border-radius:28px;background:transparent;color:#666972;font-size:16px;z-index:4;cursor:pointer}
+.bed-close-icon{display:grid;place-items:center;width:48px;height:48px;border:1px solid #e0e0df;border-radius:50%;background:#ffffffed;color:#41454f}
+.bed-close:hover{color:#252831}
+.bed-close:hover .bed-close-icon{background:#fff;border-color:#b8b8b7}
 .bed-close:focus-visible{outline:3px solid #ef7400;outline-offset:3px}
 .bed-close .icon{width:20px;height:20px}
 .hero .bed-status{position:absolute;left:50%;bottom:26px;transform:translateX(-50%);width:max-content;max-width:calc(100% - 48px);margin:0;padding:10px 16px;border-radius:18px;background:#fffffff0;color:#514237;font-size:14px;line-height:1.5;text-align:center;pointer-events:none}
@@ -40,6 +52,13 @@
   .hero-actions .button{min-height:50px;padding:12px 18px;font-size:14px;gap:8px}
   .hero-actions .icon{width:18px;height:18px}
   .bed-close{top:16px;right:16px}
+  #hero-bed{left:0;top:24%;width:100%;height:66%}
+  .bed-details{left:24px;top:96px;transform:none;width:calc(100% - 48px)}
+  .bed-details h2{font-size:clamp(36px,8vw,50px)}
+  .bed-details h2 span{display:inline;margin-right:.22em}
+  .bed-details h2 strong{display:inline}
+  .hero .bed-rotate-hint{left:0;bottom:7%;width:100%;font-size:14px;gap:5px}
+  .bed-rotate-hint svg{width:34px;height:27px}
 }
 @media(max-width:430px){
   .hero-actions .button{padding:12px 16px;white-space:nowrap}

@@ -40,14 +40,16 @@
         <model-viewer id="hero-bed" data-src="assets/models/violetta.glb"
           alt="Кровать Виолетта в 3D. Поворачивайте мышью, пальцем или клавишами со стрелками."
           camera-controls touch-action="pan-y" orbit-sensitivity="0.65" disable-zoom disable-pan
-          camera-orbit="0deg 82deg 105%" camera-target="0m 0.72m 0m"
+          camera-orbit="0deg 82deg 80%" camera-target="0m 0.72m 0m"
           min-camera-orbit="auto 35deg auto" max-camera-orbit="auto 85deg auto"
           field-of-view="30deg" shadow-intensity="0.6" shadow-softness="1"
           environment-image="assets/models/studio-small-09.hdr" exposure="0.85" tone-mapping="aces" interaction-prompt="none" loading="eager"
-          aria-hidden="true" tabindex="-1">
+          aria-describedby="bed-rotate-hint" aria-hidden="true" tabindex="-1">
           <span slot="progress-bar"></span>
         </model-viewer>
-        <button class="bed-close" type="button" aria-label="Вернуться к фотографии" title="Вернуться к фотографии" hidden><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button>
+        <div class="bed-details"><h2><span>Кровать</span><strong>Виолетта</strong></h2></div>
+        <p class="bed-rotate-hint" id="bed-rotate-hint"><svg viewBox="0 0 40 32" aria-hidden="true"><path d="M6 12a17 9 0 0 1 28 0M6 6v6h6M34 6v6h-6M20 15v12m-5-5 5 5 5-5"/></svg><span>Потяните, чтобы повернуть</span></p>
+        <button class="bed-close" type="button" aria-label="Вернуться к фотографии" title="Вернуться к фотографии" hidden><span class="bed-close-icon"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></span><span>Вернуться</span></button>
         <p class="bed-status" role="status" hidden></p>
       </div>
       <div class="hero-inner container">
