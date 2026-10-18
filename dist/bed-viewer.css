@@ -20,7 +20,7 @@
 .bed-retry{position:absolute;bottom:22px;left:50%;transform:translateX(-50%);min-height:44px;white-space:nowrap;padding:10px 18px;border:1px solid #e8e2dd;border-radius:24px;background:#fff;font-size:12px}
 @media(max-width:1100px) and (min-width:761px){.bed-stage{left:40%;right:-2%}.bed-tools{bottom:20px}.hero .bed-hint{font-size:11px}}
 @media(max-width:760px){
-  .hero:has(.bed-stage){height:auto;min-height:calc(100svh - var(--site-header-height));display:flex;flex-direction:column}
+  .hero:has(.bed-stage){height:auto;min-height:100svh;display:flex;flex-direction:column}
   .hero:has(.bed-stage) .hero-inner{height:auto;order:0;flex:none}
   .hero:has(.bed-stage) .hero-copy{padding-bottom:0}
   .bed-stage{position:relative;inset:auto;order:1;width:100%;min-height:330px;height:clamp(330px,calc(100svh - 330px),490px);flex:none}
