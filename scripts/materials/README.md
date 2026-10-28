@@ -39,16 +39,18 @@ manufacturing CAD. The original product photograph remains the default view.
 
 `npm run build:hanna` builds the separate `hanna.glb` from original Hanna / Sensor
 Flit shell, quilt, striped throw, slats and linkage geometry. It reuses the CC0
-normal maps; `hanna-pillows.mjs` reshapes the three CC0 pillow meshes with welded
-vertices, Taubin smoothing and recomputed normals, preserving their organic folds.
-The quilt has unequal shallow stitched bays, a rounded sewn foot border and
-short compression folds. The striped linen follows the quilt's curved support,
-with localized gathers and a longer gravity-draped left end. Pillow corners and
-casing folds are relaxed, with thin same-fabric perimeter seams.
-The quilt and throw have padded surfaces with rounded hems. Contact occlusion
+normal maps. `simulate-hanna-cloth.py` settles Hanna's quilt, turned edge and
+striped linen against its mattress and upholstered frame in Blender 4.5. The
+ordinary build reads the checked-in `hanna-cloth.json.gz` cache, so Blender is
+not required for a web build. Unequal cloth slack, short compression gathers,
+filled thickness and rounded hems are baked into those surfaces.
+`hanna-pillows.mjs` builds the three fitted pillowcases with soft filling,
+relaxed casing edges and irregular compression folds. Contact occlusion
 is baked separately inside the fixed and moving groups, so their shadows do
 not stay behind when the mechanism opens. The `Lift` clip is scrubbed by
 the collection section's scroll position. Product reference URLs, confirmed
 dimensions and photographic assumptions are in `hanna-sources.json`.
 Hanna uses the studio HDR with neutral tone mapping and a fixed front camera
-on +Z. Violetta retains its original lighting and interactive camera.
+on +Z. Its closer fixed framing uses a little more distance on narrow screens
+to retain the entire lifted silhouette. Violetta retains its original lighting
+and interactive camera.
