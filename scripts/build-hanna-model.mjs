@@ -8,6 +8,7 @@
 import {mkdir, readFile, writeFile} from 'node:fs/promises';
 import {resolve, dirname} from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {gunzipSync} from 'node:zlib';
 import * as THREE from 'three';
 import {RoundedBoxGeometry} from 'three/addons/geometries/RoundedBoxGeometry.js';
 import {mergeGeometries, mergeVertices} from 'three/addons/utils/BufferGeometryUtils.js';
@@ -165,148 +166,19 @@ for(const y of [.405,.587])tube(upper,roundedLoop(0,0,y,1.598,1.998,.065).map(([
 // Fabric pull handle at the foot of the slatted base.
 tube(upper,[[-.07,.367,.98],[-.07,.353,1.035],[.07,.353,1.035],[.07,.367,.98]].map(toUpper),.007,black,false,32);
 
-function surface(fn,nx,nz,shade=()=>1){
-  const positions=[],uvs=[],colors=[],indices=[];
-  for(let j=0;j<=nz;j++)for(let i=0;i<=nx;i++){
-    const u=i/nx,v=j/nz;positions.push(...fn(u,v));uvs.push(u,v);const ao=shade(u,v);colors.push(ao,ao,ao);
-  }
-  for(let j=0;j<nz;j++)for(let i=0;i<nx;i++){const a=j*(nx+1)+i,b=a+1,c=a+nx+1,d=c+1;indices.push(a,c,b,b,c,d);}
-  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(uvs,2));g.setAttribute('color',new THREE.Float32BufferAttribute(colors,3));g.setIndex(indices);g.computeVertexNormals();return g;
+// Offline cloth simulation settles the loose fabric against the mattress.
+// Cache coordinates are the closed bed's world axes; all textile meshes then
+// attach to the unchanged rigid platform for the existing lift animation.
+const cloth=JSON.parse(gunzipSync(await readFile(resolve(root,'scripts/materials/hanna-cloth.json.gz'))));
+for(const piece of cloth){
+  const g=new THREE.BufferGeometry();
+  g.setAttribute('position',new THREE.Float32BufferAttribute(piece.position,3));
+  g.setAttribute('normal',new THREE.Float32BufferAttribute(piece.normal,3));
+  g.setAttribute('uv',new THREE.Float32BufferAttribute(piece.uv,2));
+  g.translate(0,-.35,.85);
+  const material=piece.material==='stripe'?stripeMat:piece.material==='reverse'?reverseMat:quiltMat;
+  add(upper,g,material,[0,0,0],[0,0,0],piece.material==='stripe'?1:8);
 }
-
-const bell=(x,centre,width)=>Math.exp(-(((x-centre)/width)**2));
-// A continuous padded surface, with a separate underside and rounded stitched
-// perimeter. Thickness follows the surface normal even on the hanging sides.
-function paddedSurface(fn,nx,nz,thickness,uvMeters=[1,1]){
-  const base=surface(fn,nx,nz),p=base.attributes.position,n=base.attributes.normal;
-  const top=base.clone(),bottom=base.clone();
-  for(let i=0;i<p.count;i++){
-    for(const [g,sign] of [[top,1],[bottom,-1]]){
-      g.attributes.position.setXYZ(i,p.getX(i)+sign*n.getX(i)*thickness/2,p.getY(i)+sign*n.getY(i)*thickness/2,p.getZ(i)+sign*n.getZ(i)*thickness/2);
-      g.attributes.uv.setXY(i,g.attributes.uv.getX(i)*uvMeters[0],g.attributes.uv.getY(i)*uvMeters[1]);
-    }
-  }
-  for(let i=0;i<bottom.index.count;i+=3){const a=bottom.index.getX(i);bottom.index.setX(i,bottom.index.getX(i+2));bottom.index.setX(i+2,a);}
-  top.computeVertexNormals();bottom.computeVertexNormals();
-  const ring=[];
-  for(let i=0;i<=nx;i++)ring.push(i);
-  for(let j=1;j<=nz;j++)ring.push(j*(nx+1)+nx);
-  for(let i=nx-1;i>=0;i--)ring.push(nz*(nx+1)+i);
-  for(let j=nz-1;j>0;j--)ring.push(j*(nx+1));
-  const rolled=surface((u,v)=>{
-    const a=ring[Math.floor(u*ring.length)%ring.length],b=ring[(Math.floor(u*ring.length)+1)%ring.length];
-    const mix=(u*ring.length)%1,point=new THREE.Vector3().fromBufferAttribute(p,a).lerp(new THREE.Vector3().fromBufferAttribute(p,b),mix);
-    const normal=new THREE.Vector3().fromBufferAttribute(n,a).lerp(new THREE.Vector3().fromBufferAttribute(n,b),mix).normalize();
-    const tangent=new THREE.Vector3().fromBufferAttribute(p,b).sub(new THREE.Vector3().fromBufferAttribute(p,a)).normalize();
-    const outward=new THREE.Vector3().crossVectors(normal,tangent).normalize();
-    return point.addScaledVector(normal,Math.cos(v*Math.PI)*thickness/2).addScaledVector(outward,Math.sin(v*Math.PI)*thickness/2).toArray();
-  },ring.length,6);
-  return mergeGeometries([top,bottom,rolled]);
-}
-
-// Hanna's quilt is supported by the mattress, with softly filled channels,
-// a broad sewn foot border and irregular gravity folds down the side edges.
-function quiltPoint(u,v){
-  const across=(u-.5)*2,side=clamp((Math.abs(across)-.78)/.22),a=side*Math.PI/2;
-  let x=Math.sign(across)*(.78*Math.min(Math.abs(across)/.78,1)+.205*Math.sin(a));
-  let z=-.25+v*1.39;
-  const end=clamp((z-.96)/.18),b=end*Math.PI/2;
-  if(end>0)z=.96+.145*Math.sin(b);
-  let y=.664-.345*(1-Math.cos(a))-.126*(1-Math.cos(b))*Math.cos(a)**2;
-  const top=Math.cos(a)*Math.cos(b);
-  const billow=.012*bell(x,-.52,.32)*bell(z,.47,.75)+.017*bell(x,-.09,.35)*bell(z,.74,.52)+.011*bell(x,.38,.33)*bell(z,.45,.68);
-  // Unequal stitched bays have restrained loft, with a few diagonal folds
-  // crossing them. They read as filled cloth rather than three inflated rolls.
-  const seams=[-.66,-.43,-.17,.09,.34,.61];
-  let loft=0;
-  for(const [centre,width,height] of [[-.76,.11,.010],[-.54,.12,.015],[-.30,.14,.012],[-.04,.13,.018],[.22,.13,.014],[.48,.14,.011],[.74,.11,.014]]){
-    loft+=height*.6*bell(x+.012*Math.sin(z*4+centre*7),centre,width)*(.38+.62*bell(z,.56,.21));
-  }
-  const fold=.010*bell(x+.19*z,-.25,.075)*bell(z,.57,.41)-.005*bell(x-.13*z,.10,.033)*bell(z,.64,.29)+.008*bell(x+.23*z,.66,.065)*bell(z,.40,.32);
-  y+=top*(billow+loft+fold);
-  for(const [i,line] of seams.entries()){
-    y-=top*.0038*bell(x,line+.007*Math.sin(z*5+i),.012+i%2*.004);
-  }
-  y-=top*.0055*bell(z,.70+.008*Math.sin(5*x),.016);
-  const border=bell(v,.905,.012);
-  y-=.013*border*Math.cos(b);z-=.013*border*Math.sin(b);
-  // The filled front border bulges out along its own normal, not only upwards.
-  // Three unequal bays and two relaxed gathers remain readable from the foot.
-  const frontFill=.008*bell(x,-.76,.11)+.011*bell(x,-.54,.12)+.008*bell(x,-.30,.14)+.013*bell(x,-.04,.13)+.010*bell(x,.22,.13)+.009*bell(x,.48,.14)+.011*bell(x,.74,.11);
-  z+=Math.sin(b)*Math.cos(a)**2*frontFill;
-  // Small compression folds taper away from the stitched border. The folded
-  // front is displaced along its normal so the detail survives the low camera.
-  for(const [i,line] of seams.entries()){
-    const d=x-line-(v-.92)*(i%2?.18:-.13),gather=bell(v,.956,.076);
-    const crease=-.009*bell(d,0,.014)+.006*bell(d,.025,.025);
-    z+=Math.sin(b)*gather*crease;
-    y+=Math.cos(b)*gather*crease;
-  }
-  const relaxed=.007*bell(x,-.59,.13)-.005*bell(x,-.22,.10)+.009*bell(x,.18,.16)-.006*bell(x,.55,.12);
-  y+=bell(v,.986,.035)*relaxed*1.8;
-  const shortGathers=[[-.77,.012,.009],[-.60,.017,.012],[-.47,.011,.008],[-.34,.020,.011],[-.21,.013,.010],[-.07,.017,.013],[.06,.010,.008],[.19,.016,.011],[.31,.012,.010],[.44,.021,.012],[.57,.013,.009],[.70,.018,.011],[.81,.011,.008]];
-  for(const [i,[at,width,depth]] of shortGathers.entries()){
-    const crease=bell(x+(v-.96)*(i%2?.23:-.18),at,width);
-    z-=depth*crease*bell(v,.957+(i%3-1)*.012,.035)*Math.cos(a)**2;
-  }
-  const sideFold=.014*bell(z,.34,.14)-.009*bell(z,.50,.06)+.018*bell(z,.79,.18)-.006*bell(z,.93,.05);
-  y+=side*sideFold*Math.sin(a);
-  x+=Math.sign(x)*side*(.010*bell(z,.44,.19)-.005*bell(z,.71,.09)+.012*bell(z,.94,.15));
-  return [x,y,z];
-}
-const quilt=paddedSurface((u,v)=>toUpper(quiltPoint(u,v)),144,96,.025,[2.25,1.40]);
-add(upper,quilt,quiltMat,[0,0,0],[0,0,0],8);
-for(const side of [0,1])tube(upper,Array.from({length:80},(_,j)=>toUpper(quiltPoint(side,j/79))),.0012,quiltMat,false,100);
-tube(upper,Array.from({length:100},(_,i)=>toUpper(quiltPoint(i/99,1))),.0013,quiltMat,false,130);
-// A tiny stitched horizontal border lies on the outside of the padded surface.
-// Offsetting along the local normal keeps it visible on the rounded front roll.
-function quiltOutside(u,v){
-  const p=new THREE.Vector3(...quiltPoint(u,v)),du=new THREE.Vector3(...quiltPoint(Math.min(1,u+.0001),v)).sub(new THREE.Vector3(...quiltPoint(Math.max(0,u-.0001),v))),dv=new THREE.Vector3(...quiltPoint(u,v+.0001)).sub(new THREE.Vector3(...quiltPoint(u,v-.0001)));
-  return toUpper(p.addScaledVector(dv.cross(du).normalize(),.013).toArray());
-}
-tube(upper,Array.from({length:145},(_,i)=>quiltOutside(.05+.90*i/144,.905)),.00085,quiltMat,false,180);
-// The loose turned top edge has a broad soft roll with a slightly uneven silhouette.
-const fold=paddedSurface((u,v)=>{
-  const p=quiltPoint(u,.02+v*.20),x=p[0];p[2]=-.27+v*.31+.018*Math.sin(5*x);
-  p[1]+=.018+.035*Math.sin(v*Math.PI)+.007*Math.sin(9*x+3*v)*Math.sin(v*Math.PI);return toUpper(p);
-},96,28,.014,[2.2,.32]);
-add(upper,fold,reverseMat,[0,0,0],[0,0,0],8);
-
-// Thin striped throw, loosely bunched over the quilt and longer at the left edge.
-function throwPoint(u,v){
-  const side=clamp((Math.abs((u-.5)*2)-.77)/.23),sgn=u<.5?-1:1,a=side*Math.PI/2;
-  const left=1-smooth((u-.02)/.30);
-  const x=sgn*(Math.min(Math.abs((u-.5)*2),.77)+(.23+.045*left)*Math.sin(a));
-  const z=-.03+v*.47+.045*Math.sin(u*6+.7)+.025*Math.sin(u*15+1)*(v-.5)+left*(.70+.18*v);
-  const lengthDrop=.26+(.17*(1-smooth((u-.04)/.2)));
-  // Linen settles onto the quilt. Only the gathered upper edge rises off its
-  // support; the cloth does not bridge the mattress as an independent plane.
-  const support=quiltPoint((Math.min(Math.abs(x),.77)*sgn+1)/2,clamp((z+.25)/1.39));
-  let y=support[1]+.027+.037*bell(v,.05,.24)-lengthDrop*(1-Math.cos(a));
-  const flat=Math.cos(a);
-  const gathers=[ [.14,.020,.021,.045],[.24,.014,.013,-.033],[.325,.028,.026,.065],[.405,.016,.017,-.04],[.478,.023,.034,.08],[.55,.013,.019,-.035],[.635,.030,.026,-.06],[.735,.018,.021,.038],[.82,.023,.014,-.03] ];
-  for(const [at,width,height,drift] of gathers){
-    const centre=at+drift*(v-.45)+.008*Math.sin(v*4+at*12);
-    const ridge=bell(u,centre,width)-.32*bell(u,centre+width*1.5,width*.65);
-    y+=flat*height*ridge*(.40+.60*bell(v,.45+at*.25,.39));
-  }
-  y+=flat*.027*bell(u+.09*(v-.4),.485,.045)*bell(v,.34,.22);
-  y+=flat*.008*bell(v,.94,.05)*(.35+bell(u,.32,.09)+.65*bell(u,.73,.12));
-  // Two broad gravity folds in the long left end, with gently curled edges.
-  y+=left*Math.sin(a)*(.020*bell(v,.27,.16)-.010*bell(v,.48,.08)+.015*bell(v,.75,.22));
-  if(Math.abs(x)<.981&&z<1.10&&z>-.25){
-    // Follow the quilt's curved shoulder as well as its top. This prevents a
-    // long diagonal linen end cutting through the filled blanket underneath.
-    const qAcross=Math.abs(x)<=.78?Math.abs(x):.78+.22*Math.asin(clamp((Math.abs(x)-.78)/.205))/(Math.PI/2);
-    const qZ=z<=.96?z:.96+.18*Math.asin(clamp((z-.96)/.145))/(Math.PI/2);
-    const beneath=quiltPoint((1+sgn*qAcross)/2,clamp((qZ+.25)/1.39));
-    const supportY=beneath[1]+.023;
-    y=supportY+.003*Math.log1p(Math.exp((y-supportY)/.003));
-  }
-  return [x,y,z];
-}
-add(upper,paddedSurface((u,v)=>toUpper(throwPoint(u,v)),160,56,.005),stripeMat);
-for(const v of [0,1])tube(upper,Array.from({length:125},(_,i)=>toUpper(throwPoint(i/124,v))),.0013,whiteSeam,false,150);
 
 for(const piece of createHannaOrganicPillows()){
   const material=piece.material==='taupe'?taupeMat:piece.material==='seam'?whiteSeam:pillowMat;
@@ -439,8 +311,8 @@ function texturePng(kind){
     let value=247+noise*3+(x%2?1:-1)+(y%2?.5:-.5);
     if(kind==='stripe'){
       const stripe=(x/size*25)%1;
-      if(stripe>.39&&stripe<.50)value=106+noise*8;
-      else if((stripe>.35&&stripe<.37)||(stripe>.52&&stripe<.54))value=151+noise*6;
+      if(stripe>.39&&stripe<.50)value=80+noise*8;
+      else if((stripe>.35&&stripe<.37)||(stripe>.52&&stripe<.54))value=130+noise*6;
       else value=246+noise*3;
     }
     const offset=(y*size+x)*4;png.data[offset]=clamp(Math.round(value),0,255);png.data[offset+1]=clamp(Math.round(value),0,255);png.data[offset+2]=clamp(Math.round(value-.7),0,255);png.data[offset+3]=255;
@@ -484,4 +356,4 @@ const binHeader=Buffer.alloc(8);binHeader.writeUInt32LE(body.length+bodyPad.leng
 const result=Buffer.concat([header,json,jsonPad,binHeader,body,bodyPad]);
 await writeFile(resolve(out,'hanna.glb'),result);
 const bounds=b=>({min:b.min.toArray(),max:b.max.toArray(),size:b.getSize(new THREE.Vector3()).toArray()});
-console.log(JSON.stringify({model:'dist/assets/models/hanna.glb',bytes:result.length,triangles,drawCalls,animation:'Lift',duration:1,boundsClosed:bounds(frameBounds[0]),boundsOpen:bounds(frameBounds[1]),movingBoundsClosed:bounds(movingBounds[0]),movingBoundsOpen:bounds(movingBounds[1]),validation:scene.userData.validation,recommendedCamera:{orbit:'0deg 85deg 6m',target:'0m 0.85m 0m',fieldOfView:'30deg'}},null,2));
+console.log(JSON.stringify({model:'dist/assets/models/hanna.glb',bytes:result.length,triangles,drawCalls,animation:'Lift',duration:1,boundsClosed:bounds(frameBounds[0]),boundsOpen:bounds(frameBounds[1]),movingBoundsClosed:bounds(movingBounds[0]),movingBoundsOpen:bounds(movingBounds[1]),validation:scene.userData.validation,recommendedCamera:{orbit:'0deg 85deg 5.2m',target:'0m 0.94m 0m',fieldOfView:'30deg'}},null,2));
