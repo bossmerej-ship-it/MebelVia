@@ -151,7 +151,8 @@ export function createHannaOrganicPillows() {
     {name:'HannaOrganicWhiteRight',material:'white',size:[.77,.415,.300],centre:[.405,.826,-.708]},
     {name:'HannaOrganicTaupe',material:'taupe',size:[.57,.30,.255],centre:[.012,.784,-.4632]}
   ];
-  return settings.map((setting,pieceIndex) => {
+  const pieces = [];
+  for (const [pieceIndex, setting] of settings.entries()) {
     const source = sources[pieceIndex];
     const vertices = [], indices = [], unique = new Map();
     for (let offset=0;offset<source.position.length;offset+=3) {
@@ -179,12 +180,42 @@ export function createHannaOrganicPillows() {
     }
     // Alternating positive/negative passes remove sharp creases while retaining
     // the photographed cloth's uneven volume and relaxed corners.
-    for(let pass=0;pass<8;pass++){laplacian(.43);laplacian(-.45);}
+    for(let pass=0;pass<(pieceIndex===2?18:14);pass++){laplacian(.43);laplacian(-.45);}
     const min = [Infinity,Infinity,Infinity],max=[-Infinity,-Infinity,-Infinity];
     for(const p of vertices)for(let axis=0;axis<3;axis++){min[axis]=Math.min(min[axis],p[axis]);max[axis]=Math.max(max[axis],p[axis]);}
     const positions=[],uvs=[];
     for(const p of vertices){
-      const scaled=p.map((value,axis) => (value-(min[axis]+max[axis])/2)/(max[axis]-min[axis])*setting.size[axis]+setting.centre[axis]);
+      let [u,v,w]=p.map((value,axis) => 2*(value-(min[axis]+max[axis])/2)/(max[axis]-min[axis]));
+      // Relax the empty case corners around the filling. The original cloth
+      // remains the shape owner; this removes only its long, pointed tips.
+      const originalU=u, originalV=v;
+      u*=1-.065*Math.abs(v)**6;
+      v*=1-.050*Math.abs(originalU)**6;
+      // In the photo the white cases rest broadly against the head, rather
+      // than having a diagonal hard top edge from a skewed stock pillow.
+      if(pieceIndex<2)v+=.047*originalU*clamp((originalV-.12)/.65);
+      const rho=(Math.abs(u)**6+Math.abs(v)**6)**(1/6);
+      const filling=Math.sqrt(Math.max(0,1-Math.min(1,rho)**3.8));
+      const front=clamp((w-.05)/.35);
+      const worldX=setting.centre[0]+u*setting.size[0]/2;
+      // Keep the existing inner contact patch behind the taupe pillow fixed.
+      // Outer white faces and the taupe front can relax towards their filling.
+      const freeFace=pieceIndex===2?1:clamp((Math.abs(worldX)-.30)/.13);
+      w+=.19*front*freeFace*(filling-w);
+      // Small, unequal compression creases enter from the side/bottom hem.
+      // Their thin valleys have broad soft shoulders and die into the middle.
+      const seed=[1.1,2.8,4.3][pieceIndex];
+      const sideDistance=1-Math.abs(u),bottomDistance=v+1;
+      const sideLine=.28+.20*sideDistance+.035*Math.sin(seed+3*sideDistance);
+      const sideFold=(gaussian(v-sideLine,.070)-.46*gaussian(v-sideLine-.105,.12))
+        *Math.exp(-sideDistance/.34)*(1-Math.exp(-sideDistance*20));
+      const bottomLine=-.31+.32*bottomDistance+.06*Math.sin(seed+bottomDistance*4);
+      const bottomFold=(gaussian(u-bottomLine,.065)-.40*gaussian(u-bottomLine-.095,.11))
+        *Math.exp(-bottomDistance/.40)*(1-Math.exp(-bottomDistance*22));
+      const millimetres=pieceIndex===2?.0032:.0027;
+      w+=2*millimetres/setting.size[2]*front*freeFace*(sideFold+bottomFold);
+      w=clamp(w,-1,1);
+      const scaled=[u,v,w].map((value,axis)=>value*setting.size[axis]/2+setting.centre[axis]);
       // A smooth flattened support patch, rather than visible floating tips or
       // lower vertices passing into the mattress surface.
       const supportY=.634;
@@ -197,6 +228,48 @@ export function createHannaOrganicPillows() {
     geometry.setAttribute('uv',new THREE.Float32BufferAttribute(uvs,2));
     geometry.setIndex(indices);geometry.computeVertexNormals();geometry.computeBoundingBox();
     geometry.name=setting.name;
-    return {name:setting.name,material:setting.material,geometry};
-  });
+    pieces.push({name:setting.name,material:setting.material,geometry});
+
+    // Trace a real closed section through the organic casing, so the welt
+    // follows its relaxed outline instead of drawing a rectangular tube over it.
+    const segments=[], pointByKey=new Map(), links=new Map();
+    const keyOf=p=>p.map(value=>Math.round(value*100000)).join(',');
+    for(let index=0;index<indices.length;index+=3){
+      const triangle=indices.slice(index,index+3).map(vertex=>positions.slice(vertex*3,vertex*3+3));
+      const cuts=[];
+      for(let edge=0;edge<3;edge++){
+        const a=triangle[edge],b=triangle[(edge+1)%3];
+        const da=a[2]-setting.centre[2],db=b[2]-setting.centre[2];
+        if(da*db<0){const t=da/(da-db);cuts.push(a.map((value,axis)=>value+t*(b[axis]-value)));}
+      }
+      if(cuts.length===2)segments.push(cuts);
+    }
+    for(const [a,b] of segments){
+      const ka=keyOf(a),kb=keyOf(b);if(ka===kb)continue;
+      pointByKey.set(ka,a);pointByKey.set(kb,b);
+      if(!links.has(ka))links.set(ka,new Set());if(!links.has(kb))links.set(kb,new Set());
+      links.get(ka).add(kb);links.get(kb).add(ka);
+    }
+    const visited=new Set(),loops=[];
+    for(const first of links.keys()){
+      if(visited.has(first))continue;
+      const loop=[];let previous=null,current=first;
+      while(current&&!visited.has(current)){
+        visited.add(current);loop.push(new THREE.Vector3(...pointByKey.get(current)));
+        const next=[...links.get(current)].find(key=>key!==previous&&!visited.has(key));
+        previous=current;current=next;
+      }
+      if(loop.length>20)loops.push(loop);
+    }
+    const outline=loops.sort((a,b)=>b.length-a.length)[0];
+    if(outline){
+      const curve=new THREE.CatmullRomCurve3(outline,true,'centripetal');
+      const welt=new THREE.TubeGeometry(curve,240,.00075,5,true);
+      const uv=welt.getAttribute('uv');
+      for(let i=0;i<uv.count;i++)uv.setXY(i,uv.getX(i)*curve.getLength(),uv.getY(i)*.0047);
+      welt.name=setting.name+'FineSeam';
+      pieces.push({name:welt.name,material:setting.material,geometry:welt});
+    }
+  }
+  return pieces;
 }

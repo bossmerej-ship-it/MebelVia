@@ -41,6 +41,10 @@ manufacturing CAD. The original product photograph remains the default view.
 Flit shell, quilt, striped throw, slats and linkage geometry. It reuses the CC0
 normal maps; `hanna-pillows.mjs` reshapes the three CC0 pillow meshes with welded
 vertices, Taubin smoothing and recomputed normals, preserving their organic folds.
+The quilt has unequal shallow stitched bays, a rounded sewn foot border and
+short compression folds. The striped linen follows the quilt's curved support,
+with localized gathers and a longer gravity-draped left end. Pillow corners and
+casing folds are relaxed, with thin same-fabric perimeter seams.
 The quilt and throw have padded surfaces with rounded hems. Contact occlusion
 is baked separately inside the fixed and moving groups, so their shadows do
 not stay behind when the mechanism opens. The `Lift` clip is scrubbed by

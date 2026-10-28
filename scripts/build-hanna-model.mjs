@@ -214,31 +214,57 @@ function quiltPoint(u,v){
   if(end>0)z=.96+.145*Math.sin(b);
   let y=.664-.345*(1-Math.cos(a))-.126*(1-Math.cos(b))*Math.cos(a)**2;
   const top=Math.cos(a)*Math.cos(b);
-  const billow=.025*bell(x,-.52,.22)*bell(z,.47,.75)+.034*bell(x,-.09,.25)*bell(z,.74,.52)+.024*bell(x,.38,.23)*bell(z,.45,.68)+.016*bell(x,.68,.18)*bell(z,.84,.34);
-  const fold=.019*bell(x+.11*z,-.31,.105)*bell(z,.52,.66)-.011*bell(x-.07*z,.04,.055)*bell(z,.60,.46)+.016*bell(x+.16*z,.64,.10)*bell(z,.30,.52);
-  y+=top*(billow+fold+.004*Math.sin(10*z+7*x)*Math.sin(6*x-3*z));
-  // Slightly irregular quilting lines, with rounded filled bays on either side.
-  for(const [line,width] of [[-.55,.026],[-.12,.035],[.48,.023]]){
-    y-=top*.006*bell(x,line+.010*Math.sin(z*6+line*9),width);
+  const billow=.012*bell(x,-.52,.32)*bell(z,.47,.75)+.017*bell(x,-.09,.35)*bell(z,.74,.52)+.011*bell(x,.38,.33)*bell(z,.45,.68);
+  // Unequal stitched bays have restrained loft, with a few diagonal folds
+  // crossing them. They read as filled cloth rather than three inflated rolls.
+  const seams=[-.66,-.43,-.17,.09,.34,.61];
+  let loft=0;
+  for(const [centre,width,height] of [[-.76,.11,.010],[-.54,.12,.015],[-.30,.14,.012],[-.04,.13,.018],[.22,.13,.014],[.48,.14,.011],[.74,.11,.014]]){
+    loft+=height*.6*bell(x+.012*Math.sin(z*4+centre*7),centre,width)*(.38+.62*bell(z,.56,.21));
   }
+  const fold=.010*bell(x+.19*z,-.25,.075)*bell(z,.57,.41)-.005*bell(x-.13*z,.10,.033)*bell(z,.64,.29)+.008*bell(x+.23*z,.66,.065)*bell(z,.40,.32);
+  y+=top*(billow+loft+fold);
+  for(const [i,line] of seams.entries()){
+    y-=top*.0038*bell(x,line+.007*Math.sin(z*5+i),.012+i%2*.004);
+  }
+  y-=top*.0055*bell(z,.70+.008*Math.sin(5*x),.016);
   const border=bell(v,.905,.012);
-  y-=.010*border*Math.cos(b);z-=.010*border*Math.sin(b);
+  y-=.013*border*Math.cos(b);z-=.013*border*Math.sin(b);
   // The filled front border bulges out along its own normal, not only upwards.
   // Three unequal bays and two relaxed gathers remain readable from the foot.
-  const frontFill=.023*bell(x,-.56,.18)+.030*bell(x,-.10,.25)+.020*bell(x,.45,.15)-.012*bell(x,-.29,.055)-.014*bell(x,.22,.065);
+  const frontFill=.008*bell(x,-.76,.11)+.011*bell(x,-.54,.12)+.008*bell(x,-.30,.14)+.013*bell(x,-.04,.13)+.010*bell(x,.22,.13)+.009*bell(x,.48,.14)+.011*bell(x,.74,.11);
   z+=Math.sin(b)*Math.cos(a)**2*frontFill;
-  // Short puckers gather toward the hem; the upper quilt stays broad and calm.
-  const hem=bell(v,.956,.075);
-  y+=hem*(.008*bell(x,-.68,.055)-.005*bell(x,-.58,.030)+.011*bell(x,-.19,.085)-.007*bell(x,-.05,.036)+.009*bell(x,.39,.063)-.006*bell(x,.51,.035)+.005*bell(x,.76,.050));
-  y+=side*(.010*Math.sin(10*z+.6)+.005*Math.sin(24*z+1.1))*Math.sin(a);
-  x+=Math.sign(x)*side*(.008*Math.sin(9*z+.8)+.004*Math.cos(19*z));
-  z+=end*(.008*Math.sin(12*x+1)+.003*Math.sin(29*x+2));
+  // Small compression folds taper away from the stitched border. The folded
+  // front is displaced along its normal so the detail survives the low camera.
+  for(const [i,line] of seams.entries()){
+    const d=x-line-(v-.92)*(i%2?.18:-.13),gather=bell(v,.956,.076);
+    const crease=-.009*bell(d,0,.014)+.006*bell(d,.025,.025);
+    z+=Math.sin(b)*gather*crease;
+    y+=Math.cos(b)*gather*crease;
+  }
+  const relaxed=.007*bell(x,-.59,.13)-.005*bell(x,-.22,.10)+.009*bell(x,.18,.16)-.006*bell(x,.55,.12);
+  y+=bell(v,.986,.035)*relaxed*1.8;
+  const shortGathers=[[-.77,.012,.009],[-.60,.017,.012],[-.47,.011,.008],[-.34,.020,.011],[-.21,.013,.010],[-.07,.017,.013],[.06,.010,.008],[.19,.016,.011],[.31,.012,.010],[.44,.021,.012],[.57,.013,.009],[.70,.018,.011],[.81,.011,.008]];
+  for(const [i,[at,width,depth]] of shortGathers.entries()){
+    const crease=bell(x+(v-.96)*(i%2?.23:-.18),at,width);
+    z-=depth*crease*bell(v,.957+(i%3-1)*.012,.035)*Math.cos(a)**2;
+  }
+  const sideFold=.014*bell(z,.34,.14)-.009*bell(z,.50,.06)+.018*bell(z,.79,.18)-.006*bell(z,.93,.05);
+  y+=side*sideFold*Math.sin(a);
+  x+=Math.sign(x)*side*(.010*bell(z,.44,.19)-.005*bell(z,.71,.09)+.012*bell(z,.94,.15));
   return [x,y,z];
 }
-const quilt=paddedSurface((u,v)=>toUpper(quiltPoint(u,v)),112,76,.025,[2.25,1.40]);
+const quilt=paddedSurface((u,v)=>toUpper(quiltPoint(u,v)),144,96,.025,[2.25,1.40]);
 add(upper,quilt,quiltMat,[0,0,0],[0,0,0],8);
 for(const side of [0,1])tube(upper,Array.from({length:80},(_,j)=>toUpper(quiltPoint(side,j/79))),.0012,quiltMat,false,100);
 tube(upper,Array.from({length:100},(_,i)=>toUpper(quiltPoint(i/99,1))),.0013,quiltMat,false,130);
+// A tiny stitched horizontal border lies on the outside of the padded surface.
+// Offsetting along the local normal keeps it visible on the rounded front roll.
+function quiltOutside(u,v){
+  const p=new THREE.Vector3(...quiltPoint(u,v)),du=new THREE.Vector3(...quiltPoint(Math.min(1,u+.0001),v)).sub(new THREE.Vector3(...quiltPoint(Math.max(0,u-.0001),v))),dv=new THREE.Vector3(...quiltPoint(u,v+.0001)).sub(new THREE.Vector3(...quiltPoint(u,v-.0001)));
+  return toUpper(p.addScaledVector(dv.cross(du).normalize(),.013).toArray());
+}
+tube(upper,Array.from({length:145},(_,i)=>quiltOutside(.05+.90*i/144,.905)),.00085,quiltMat,false,180);
 // The loose turned top edge has a broad soft roll with a slightly uneven silhouette.
 const fold=paddedSurface((u,v)=>{
   const p=quiltPoint(u,.02+v*.20),x=p[0];p[2]=-.27+v*.31+.018*Math.sin(5*x);
@@ -253,17 +279,33 @@ function throwPoint(u,v){
   const x=sgn*(Math.min(Math.abs((u-.5)*2),.77)+(.23+.045*left)*Math.sin(a));
   const z=-.03+v*.47+.045*Math.sin(u*6+.7)+.025*Math.sin(u*15+1)*(v-.5)+left*(.70+.18*v);
   const lengthDrop=.26+(.17*(1-smooth((u-.04)/.2)));
-  // The loose rolled back edge supports a visibly sloping band of linen.
-  let y=.758-.075*smooth(v)-lengthDrop*(1-Math.cos(a));
+  // Linen settles onto the quilt. Only the gathered upper edge rises off its
+  // support; the cloth does not bridge the mattress as an independent plane.
+  const support=quiltPoint((Math.min(Math.abs(x),.77)*sgn+1)/2,clamp((z+.25)/1.39));
+  let y=support[1]+.027+.037*bell(v,.05,.24)-lengthDrop*(1-Math.cos(a));
   const flat=Math.cos(a);
-  // Different widths and directions keep this a loose woven throw, not an accordion.
-  y+=flat*(.024*bell(u+.08*v,.36,.055)*bell(v,.51,.52)+.030*bell(u-.07*v,.60,.075)*bell(v,.56,.43)+.018*bell(u+.04*v,.77,.06)*bell(v,.34,.40));
-  y+=flat*(.009*Math.sin(13*u+5*v)+.005*Math.sin(29*u-7*v))*Math.sin(Math.PI*v);
-  y+=.004*Math.sin(39*u+6*v)*flat;
-  y+=.018*bell(v,.88,.08)*(.75+.25*Math.sin(11*u+1));
+  const gathers=[ [.14,.020,.021,.045],[.24,.014,.013,-.033],[.325,.028,.026,.065],[.405,.016,.017,-.04],[.478,.023,.034,.08],[.55,.013,.019,-.035],[.635,.030,.026,-.06],[.735,.018,.021,.038],[.82,.023,.014,-.03] ];
+  for(const [at,width,height,drift] of gathers){
+    const centre=at+drift*(v-.45)+.008*Math.sin(v*4+at*12);
+    const ridge=bell(u,centre,width)-.32*bell(u,centre+width*1.5,width*.65);
+    y+=flat*height*ridge*(.40+.60*bell(v,.45+at*.25,.39));
+  }
+  y+=flat*.027*bell(u+.09*(v-.4),.485,.045)*bell(v,.34,.22);
+  y+=flat*.008*bell(v,.94,.05)*(.35+bell(u,.32,.09)+.65*bell(u,.73,.12));
+  // Two broad gravity folds in the long left end, with gently curled edges.
+  y+=left*Math.sin(a)*(.020*bell(v,.27,.16)-.010*bell(v,.48,.08)+.015*bell(v,.75,.22));
+  if(Math.abs(x)<.981&&z<1.10&&z>-.25){
+    // Follow the quilt's curved shoulder as well as its top. This prevents a
+    // long diagonal linen end cutting through the filled blanket underneath.
+    const qAcross=Math.abs(x)<=.78?Math.abs(x):.78+.22*Math.asin(clamp((Math.abs(x)-.78)/.205))/(Math.PI/2);
+    const qZ=z<=.96?z:.96+.18*Math.asin(clamp((z-.96)/.145))/(Math.PI/2);
+    const beneath=quiltPoint((1+sgn*qAcross)/2,clamp((qZ+.25)/1.39));
+    const supportY=beneath[1]+.023;
+    y=supportY+.003*Math.log1p(Math.exp((y-supportY)/.003));
+  }
   return [x,y,z];
 }
-add(upper,paddedSurface((u,v)=>toUpper(throwPoint(u,v)),128,40,.005),stripeMat);
+add(upper,paddedSurface((u,v)=>toUpper(throwPoint(u,v)),160,56,.005),stripeMat);
 for(const v of [0,1])tube(upper,Array.from({length:125},(_,i)=>toUpper(throwPoint(i/124,v))),.0013,whiteSeam,false,150);
 
 for(const piece of createHannaOrganicPillows()){
