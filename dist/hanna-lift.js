@@ -23,6 +23,19 @@ export function initHannaLift() {
   let lastProgress = -1;
   let duration = 0;
 
+  // Keep both ends of the lift inside the closer product framing. A narrow
+  // canvas needs slightly more distance; scroll never changes the camera.
+  function frameBed() {
+    const radius = matchMedia('(max-width: 760px)').matches ? '5.65m' : '5.2m';
+    const orbit = `0deg 85deg ${radius}`;
+    if (viewer.getAttribute('camera-orbit') !== orbit) {
+      viewer.setAttribute('camera-orbit', orbit);
+      if (loaded) viewer.jumpCameraToGoal();
+    }
+  }
+  frameBed();
+  window.addEventListener('resize', frameBed, { passive: true });
+
   // A late model response must not move a visitor away from a visible catalogue
   // anchor. Preserve its screen position while switching the section's height.
   function changeLayout(change) {
