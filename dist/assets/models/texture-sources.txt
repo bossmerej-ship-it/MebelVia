@@ -39,6 +39,8 @@ Hanna / Sensor Flit is a separate photographic reconstruction, with a scroll-dri
 Lift clip. The owner confirmed the private-label identity. Manufacturer reference:
 https://sensorsleep.ru/product/krovat-flit
 Its shell, padded quilt, striped throw, slats and linkage are new geometry.
-The CC0 pillow meshes are reshaped and smoothed; normal maps above are reused.
+The bedding is draped offline against Hanna's mattress and frame; its checked-in
+mesh cache is built by scripts/simulate-hanna-cloth.py. The three pillowcases
+use original fitted geometry with irregular folds; normal maps above are reused.
 Hanna uses the studio HDR with neutral tone mapping. Outer dimensions and hinge positions
 are inferred; this is not manufacturing CAD. Build with npm run build:hanna.

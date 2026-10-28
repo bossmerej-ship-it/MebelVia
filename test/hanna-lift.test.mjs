@@ -56,6 +56,7 @@ function fixture(reduced = false) {
   const window = new EventTarget();
   const motion = new EventTarget();
   motion.matches = reduced;
+  const narrow = { matches: false };
   const frames = new Map(), timers = new Map();
   let frameId = 0, timerId = 0, intersect;
   class IntersectionObserver {
@@ -66,7 +67,7 @@ function fixture(reduced = false) {
   const source = readFileSync(new URL('../dist/hanna-lift.js', import.meta.url), 'utf8').replaceAll('export function ', 'function ');
   vm.runInNewContext(source, {
     document, window, IntersectionObserver,
-    matchMedia: () => motion,
+    matchMedia: query => query.includes('max-width') ? narrow : motion,
     customElements: { get: () => Element },
     requestAnimationFrame: callback => { frames.set(++frameId, callback); return frameId; },
     cancelAnimationFrame: id => frames.delete(id),
@@ -80,9 +81,31 @@ function fixture(reduced = false) {
     section, viewer, photo, window, document, motion, frames, timers, flush,
     near: value => intersect([{ isIntersecting: value }]),
     loaded: () => viewer.dispatchEvent(new Event('load')),
+    narrow: value => { narrow.matches = value; window.dispatchEvent(new Event('resize')); },
     preference: value => { motion.matches = value; motion.dispatchEvent(new Event('change')); }
   };
 }
+
+test('closer camera stays fixed through forward and reverse lift, with room on narrow screens', () => {
+  const f = fixture();
+  f.near(true); f.loaded(); f.flush();
+  const camera = f.viewer.getAttribute('camera-orbit');
+  assert.equal(camera, '0deg 85deg 5.2m');
+  for (const top of [-700, -1400, -700, 0]) {
+    f.section.top = top;
+    f.window.dispatchEvent(new Event('scroll')); f.flush();
+    assert.equal(f.viewer.getAttribute('camera-orbit'), camera);
+  }
+  f.section.top = -700;
+  f.window.dispatchEvent(new Event('scroll')); f.flush();
+  const time = f.viewer.currentTime;
+  f.narrow(true); f.flush();
+  assert.equal(f.viewer.getAttribute('camera-orbit'), '0deg 85deg 5.65m');
+  assert.equal(f.viewer.currentTime, time);
+  f.narrow(false); f.flush();
+  assert.equal(f.viewer.getAttribute('camera-orbit'), camera);
+  assert.equal(f.viewer.currentTime, time);
+});
 
 test('asset loading is lazy and failure keeps the accessible photo in normal flow', () => {
   const f = fixture();
