@@ -1,0 +1,85 @@
+{
+  "tool": "image_gen.imagegen (built-in)",
+  "briefs": [
+    {
+      "id": "tatlin",
+      "prompt": "Use case: precise-object-edit. Asset type: premium furniture ecommerce catalogue photograph, landscape 1536x1024. Input image 1 is the EDIT TARGET and sole source of the actual bed design and upholstery. Input image 2 is a STYLE AND COMPOSITION reference ONLY; do not copy its brown bed or its vertically channeled headboard. Restage the bed from input 1 as an exceptionally realistic professional studio product photograph on a seamless PURE WHITE (#ffffff) background and white floor. Match input 2's front-left three-quarter camera view, eye level slightly above mattress, showing the complete bed, centered, filling about 85 percent of width with clean white breathing room all around. The entire headboard, frame and feet must be inside the canvas. Style the mattress with tactile white cotton bedding, four loosely filled white pillows and an understated folded charcoal-gray herringbone throw across the lower third, similar to reference 2. Keep pillows low enough that the distinctive headboard is readable. Physically plausible natural cotton wrinkles, slightly imperfect fabric weave, stitching and gentle upholstery compression. Soft large studio key light and subtle neutral contact shadow underneath. Believable 50mm product photography: coherent perspective, straight geometry, crisp product focus, natural detail, no waxy surfaces or plastic smoothness, no exaggerated HDR or CGI showroom look. Remove the room, other furniture, lamps, artworks, branding, text, gallery controls, borders and loading symbols. One bed only; no labels, collages, extra furniture, detached accessories or watermarks. Preserve target bed identity and proportions; change presentation, not the furniture design. Identity locks for TATLIN: warm light greige fine fabric, a low broad headboard split into exactly TWO large softly padded rectangular panels by a single vertical center seam; gently rounded corners, no vertical fluting and no diamond tufting. Upholstered low rails and footboard with rounded outer corners, short dark slim feet. Preserve its restrained low headboard height.",
+      "inputs": [
+        "<workspace>/site/dist/assets/catalog/tatlin-bedroom.png",
+        "<workspace>/site/source-assets/catalog-style-reference.png"
+      ]
+    },
+    {
+      "id": "monika",
+      "prompt": "Use case: precise-object-edit. Asset type: premium furniture ecommerce catalogue photograph, landscape 1536x1024. Input image 1 is the EDIT TARGET and sole source of the actual bed design and upholstery. Input image 2 is a STYLE AND COMPOSITION reference ONLY; do not copy its brown bed or its vertically channeled headboard. Restage the bed from input 1 as an exceptionally realistic professional studio product photograph on a seamless PURE WHITE (#ffffff) background and white floor. Match input 2's front-left three-quarter camera view, eye level slightly above mattress, showing the complete bed, centered, filling about 85 percent of width with clean white breathing room all around. The entire headboard, frame and feet must be inside the canvas. Style the mattress with tactile white cotton bedding, four loosely filled white pillows and an understated folded charcoal-gray herringbone throw across the lower third, similar to reference 2. Keep pillows low enough that the distinctive headboard is readable. Physically plausible natural cotton wrinkles, slightly imperfect fabric weave, stitching and gentle upholstery compression. Soft large studio key light and subtle neutral contact shadow underneath. Believable 50mm product photography: coherent perspective, straight geometry, crisp product focus, natural detail, no waxy surfaces or plastic smoothness, no exaggerated HDR or CGI showroom look. Remove the room, other furniture, lamps, artworks, branding, text, gallery controls, borders and loading symbols. One bed only; no labels, collages, extra furniture, detached accessories or watermarks. Preserve target bed identity and proportions; change presentation, not the furniture design. Identity locks for MONIKA: warm sand-beige fine woven upholstery; tall straight rectangular headboard with slim padded side wings and exactly TWO broad horizontal cushioned sections separated by one horizontal seam. Straight upholstered footboard and side rails, short dark wooden feet. Remove the screenshot arrows, black border and white loading ring completely. Keep the original tall headboard silhouette and sand color.",
+      "inputs": [
+        "<workspace>/site/dist/assets/catalog/monika-front.png",
+        "<workspace>/site/source-assets/catalog-style-reference.png"
+      ]
+    },
+    {
+      "id": "silvia",
+      "prompt": "Use case: precise-object-edit. Asset type: premium furniture ecommerce catalogue photograph, landscape 1536x1024. Input image 1 is the EDIT TARGET and sole source of the actual bed design and upholstery. Input image 2 is a STYLE AND COMPOSITION reference ONLY; do not copy its brown bed or its vertically channeled headboard. Restage the bed from input 1 as an exceptionally realistic professional studio product photograph on a seamless PURE WHITE (#ffffff) background and white floor. Match input 2's front-left three-quarter camera view, eye level slightly above mattress, showing the complete bed, centered, filling about 85 percent of width with clean white breathing room all around. The entire headboard, frame and feet must be inside the canvas. Style the mattress with tactile white cotton bedding, four loosely filled white pillows and an understated folded charcoal-gray herringbone throw across the lower third, similar to reference 2. Keep pillows low enough that the distinctive headboard is readable. Physically plausible natural cotton wrinkles, slightly imperfect fabric weave, stitching and gentle upholstery compression. Soft large studio key light and subtle neutral contact shadow underneath. Believable 50mm product photography: coherent perspective, straight geometry, crisp product focus, natural detail, no waxy surfaces or plastic smoothness, no exaggerated HDR or CGI showroom look. Remove the room, other furniture, lamps, artworks, branding, text, gallery controls, borders and loading symbols. One bed only; no labels, collages, extra furniture, detached accessories or watermarks. Preserve target bed identity and proportions; change presentation, not the furniture design. Identity locks for SILVIA: pale warm-gray upholstered bed, tall generous headboard with subtle outward flared side wings and classic deep diamond button tufting, straight top with a very gentle concave curve. Keep the original repeated diamond upholstery pattern, small fabric-covered buttons and padded frame. The matching bench shown in source is NOT part of this photograph: show the bed alone, no bench. Do not replace diamond tufting with channels or plain panels.",
+      "inputs": [
+        "<workspace>/site/dist/assets/catalog/silvia.webp",
+        "<workspace>/site/source-assets/catalog-style-reference.png"
+      ]
+    },
+    {
+      "id": "milano",
+      "prompt": "Use case: precise-object-edit. Asset type: premium furniture ecommerce catalogue photograph, landscape 1536x1024. Input image 1 is the EDIT TARGET and sole source of the actual bed design and upholstery. Input image 2 is a STYLE AND COMPOSITION reference ONLY; do not copy its brown bed or its vertically channeled headboard. Restage the bed from input 1 as an exceptionally realistic professional studio product photograph on a seamless PURE WHITE (#ffffff) background and white floor. Match input 2's front-left three-quarter camera view, eye level slightly above mattress, showing the complete bed, centered, filling about 85 percent of width with clean white breathing room all around. The entire headboard, frame and feet must be inside the canvas. Style the mattress with tactile white cotton bedding, four loosely filled white pillows and an understated folded charcoal-gray herringbone throw across the lower third, similar to reference 2. Keep pillows low enough that the distinctive headboard is readable. Physically plausible natural cotton wrinkles, slightly imperfect fabric weave, stitching and gentle upholstery compression. Soft large studio key light and subtle neutral contact shadow underneath. Believable 50mm product photography: coherent perspective, straight geometry, crisp product focus, natural detail, no waxy surfaces or plastic smoothness, no exaggerated HDR or CGI showroom look. Remove the room, other furniture, lamps, artworks, branding, text, gallery controls, borders and loading symbols. One bed only; no labels, collages, extra furniture, detached accessories or watermarks. Preserve target bed identity and proportions; change presentation, not the furniture design. Identity locks for MILANO: pale ivory/light greige finely woven upholstery, tall flat rectangular upholstered headboard with a thick softly padded outer rectangular perimeter and inset upright padded panels separated by restrained vertical seams, matching the target image. Preserve the broad headboard dimensions and subtly padded side edges of source, with no diamond buttons, no scalloped silhouette and no invented fluting. The frame is warm ivory/light beige with straight low upholstered sides. Remove the bed's room and orange brand logo. Make the actual headboard visible behind the low pillows.",
+      "inputs": [
+        "<workspace>/catalog-photos/milano.png",
+        "<workspace>/site/source-assets/catalog-style-reference.png"
+      ]
+    },
+    {
+      "id": "seda",
+      "prompt": "Use case: precise-object-edit. Asset type: premium furniture ecommerce catalogue photograph, landscape 1536x1024. Input image 1 is the EDIT TARGET and sole source of the actual bed design and upholstery. Input image 2 is a STYLE AND COMPOSITION reference ONLY; do not copy its brown bed or its vertically channeled headboard. Restage the bed from input 1 as an exceptionally realistic professional studio product photograph on a seamless PURE WHITE (#ffffff) background and white floor. Match input 2's front-left three-quarter camera view, eye level slightly above mattress, showing the complete bed, centered, filling about 85 percent of width with clean white breathing room all around. The entire headboard, frame and feet must be inside the canvas. Style the mattress with tactile white cotton bedding, four loosely filled white pillows and an understated folded charcoal-gray herringbone throw across the lower third, similar to reference 2. Keep pillows low enough that the distinctive headboard is readable. Physically plausible natural cotton wrinkles, slightly imperfect fabric weave, stitching and gentle upholstery compression. Soft large studio key light and subtle neutral contact shadow underneath. Believable 50mm product photography: coherent perspective, straight geometry, crisp product focus, natural detail, no waxy surfaces or plastic smoothness, no exaggerated HDR or CGI showroom look. Remove the room, other furniture, lamps, artworks, branding, text, gallery controls, borders and loading symbols. One bed only; no labels, collages, extra furniture, detached accessories or watermarks. Preserve target bed identity and proportions; change presentation, not the furniture design. Identity locks for SEDA: cream-beige textured boucle upholstery on headboard and frame; distinctive headboard has TWO broad rectangular padded halves with a dark walnut-brown horizontal inlay band running across the middle, interrupted at the center by a tall narrow vertically rounded capsule-shaped padded detail with a restrained warm LED outline. Keep the wide softly rounded padded outer side edges. Preserve the subtle warm amber LED strip UNDER the base, physically faint in the bright white studio, never turning the background yellow. These walnut inlays and central capsule MUST match the source; do not simplify to ordinary rectangles or remove distinctive decorative details. Bedding must leave the horizontal wood inlay and center detail exposed, with pillows resting below or in front of its bottom edge.",
+      "inputs": [
+        "<workspace>/site/dist/assets/catalog/seda.webp",
+        "<workspace>/site/source-assets/catalog-style-reference.png"
+      ]
+    },
+    {
+      "id": "soul",
+      "prompt": "Use case: precise-object-edit. Asset type: premium furniture ecommerce catalogue photograph, landscape 1536x1024. Input image 1 is the EDIT TARGET and sole source of the actual bed design and upholstery. Input image 2 is a STYLE AND COMPOSITION reference ONLY; do not copy its brown bed or its vertically channeled headboard. Restage the bed from input 1 as an exceptionally realistic professional studio product photograph on a seamless PURE WHITE (#ffffff) background and white floor. Match input 2's front-left three-quarter camera view, eye level slightly above mattress, showing the complete bed, centered, filling about 85 percent of width with clean white breathing room all around. The entire headboard, frame and feet must be inside the canvas. Style the mattress with tactile white cotton bedding, four loosely filled white pillows and an understated folded charcoal-gray herringbone throw across the lower third, similar to reference 2. Keep pillows low enough that the distinctive headboard is readable. Physically plausible natural cotton wrinkles, slightly imperfect fabric weave, stitching and gentle upholstery compression. Soft large studio key light and subtle neutral contact shadow underneath. Believable 50mm product photography: coherent perspective, straight geometry, crisp product focus, natural detail, no waxy surfaces or plastic smoothness, no exaggerated HDR or CGI showroom look. Remove the room, other furniture, lamps, artworks, branding, text, gallery controls, borders and loading symbols. One bed only; no labels, collages, extra furniture, detached accessories or watermarks. Preserve target bed identity and proportions; change presentation, not the furniture design. Identity locks for SOUL: pale stone-gray/taupe fine upholstery, simple medium-height headboard with strongly rounded upper corners, a gently padded central rounded-rectangle panel and a narrow DOUBLE piping outline following the perimeter. No extra channels, buttons, wings or high tall headboard. Upholstered rounded low footboard and side rails on short reddish dark-brown wooden feet. Preserve the compact rounded contour and the double-piped border from input 1. Keep the pillows low and modest so this simple headboard remains recognizable.",
+      "inputs": [
+        "<workspace>/site/dist/assets/catalog/soul.webp",
+        "<workspace>/site/source-assets/catalog-style-reference.png"
+      ]
+    }
+  ],
+  "files": [
+    {
+      "id": "tatlin",
+      "file": "tatlin.png",
+      "webAsset": "../../dist/assets/catalog/tatlin-studio.webp"
+    },
+    {
+      "id": "monika",
+      "file": "monika.png",
+      "webAsset": "../../dist/assets/catalog/monika-studio.webp"
+    },
+    {
+      "id": "silvia",
+      "file": "silvia.png",
+      "webAsset": "../../dist/assets/catalog/silvia-studio.webp"
+    },
+    {
+      "id": "milano",
+      "file": "milano.png",
+      "webAsset": "../../dist/assets/catalog/milano-studio.webp"
+    },
+    {
+      "id": "seda",
+      "file": "seda.png",
+      "webAsset": "../../dist/assets/catalog/seda-studio.webp"
+    },
+    {
+      "id": "soul",
+      "file": "soul.png",
+      "webAsset": "../../dist/assets/catalog/soul-studio.webp"
+    }
+  ]
+}
