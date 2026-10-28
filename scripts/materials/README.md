@@ -5,6 +5,14 @@ https://polyhaven.com/license
 
 - `velvet-normal.jpg`: https://polyhaven.com/a/velour_velvet — OpenGL normal map.
 - `cotton-normal.jpg`: https://polyhaven.com/a/stretch_poplin — OpenGL normal map.
+- `velvet-rough.jpg`, `cotton-rough.jpg`: the unmodified 1K roughness maps from
+  the same two CC0 materials. The Hanna GLB embeds them with the normal maps.
+- `hanna-ivory-velour-albedo-v2.jpg`: original warm ivory short-pile velour
+  colour tile authored with ImageGen, packed as JPEG90. It covers 60 cm while
+  the measured surface maps cover 30 cm, keeping the nap and weave in scale.
+- `hanna-grey-quilt-albedo.jpg`: original grey cotton quilting colour map
+  authored with ImageGen, packed as JPEG90. A second UV set follows the sewn
+  cells while the measured normal/roughness retains its physical scale.
 - `herringbone-normal.jpg`: https://polyhaven.com/a/poly_wool_herringbone — OpenGL normal map.
 - `pillow-source.blend`, `pillow-normal.jpg`: https://polyhaven.com/a/throw_pillows_01
   by Serhii Khromov (CC0). The mesh is reoriented, resized, smoothed and posed
@@ -50,7 +58,13 @@ is baked separately inside the fixed and moving groups, so their shadows do
 not stay behind when the mechanism opens. The `Lift` clip is scrubbed by
 the collection section's scroll position. Product reference URLs, confirmed
 dimensions and photographic assumptions are in `hanna-sources.json`.
-Hanna uses the studio HDR with neutral tone mapping and a fixed front camera
+Hanna uses a neutral three-softbox HDR with neutral tone mapping and a fixed front camera
 on +Z. Its closer fixed framing uses a little more distance on narrow screens
 to retain the entire lifted silhouette. Violetta retains its original lighting
 and interactive camera.
+Regenerate Hanna's neutral HDR with `node scripts/build-hanna-lighting.mjs`.
+
+Hanna's padded front faces contain interior vertices, allowing a shallow filled
+upholstery crown without changing their outline. Bedding retains a visible
+white mattress band below the shorter central quilt hem; its side drapes remain
+free. Pillowcase folds are shallow and short rather than deep carved channels.

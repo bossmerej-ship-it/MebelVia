@@ -42,5 +42,9 @@ Its shell, padded quilt, striped throw, slats and linkage are new geometry.
 The bedding is draped offline against Hanna's mattress and frame; its checked-in
 mesh cache is built by scripts/simulate-hanna-cloth.py. The three pillowcases
 use original fitted geometry with irregular folds; normal maps above are reused.
-Hanna uses the studio HDR with neutral tone mapping. Outer dimensions and hinge positions
+Hanna additionally embeds the unmodified Poly Haven velour/poplin roughness maps
+and original ivory velour/grey quilt colour maps authored with ImageGen. Physical mapping
+uses a 30 cm surface tile and a 60 cm colour tile for the brushed ivory nap.
+Hanna uses an original neutral softbox HDR built by scripts/build-hanna-lighting.mjs,
+with neutral tone mapping. Outer dimensions and hinge positions
 are inferred; this is not manufacturing CAD. Build with npm run build:hanna.
