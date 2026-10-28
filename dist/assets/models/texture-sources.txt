@@ -34,3 +34,10 @@ authoring tool only. The final GLB loads on demand and stays under 10 MiB.
 `bed-cloth.blend` is an optional ignored working scene; it is not deployed.
 The model is an illustrative reconstruction from the supplied photograph, not
 manufacturing CAD. The original product photograph remains the default view.
+
+Hanna / Sensor Flit is a separate photographic reconstruction, with a scroll-driven
+Lift clip. The owner confirmed the private-label identity. Manufacturer reference:
+https://sensorsleep.ru/product/krovat-flit
+Its shell, quilt, striped throw, slats and linkage are new geometry. The CC0 pillow
+geometry and normal maps above are reused. Outer dimensions and hinge positions
+are inferred; this is not manufacturing CAD. Build with npm run build:hanna.

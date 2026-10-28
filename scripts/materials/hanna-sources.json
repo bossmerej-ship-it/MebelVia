@@ -1,0 +1,33 @@
+{
+  "model": "Hanna",
+  "purpose": "Visual reconstruction for a scroll-driven product presentation, not manufacturing CAD.",
+  "referenceIdentity": {
+    "siteImage": "dist/assets/catalog/hanna.svg",
+    "manufacturerPage": "https://sensorsleep.ru/product/krovat-flit",
+    "manufacturerName": "Sensor — Флит",
+    "identityConfirmation": "The site owner confirmed that the beds are made at the same factory and Hanna is their own name.",
+    "checkedOn": "2026-10-28"
+  },
+  "publishedDimensionsCm": {
+    "headboardHeight": 110,
+    "mattressRecess": 7,
+    "floorClearance": 2,
+    "availableMattressSizes": [[140, 200], [160, 200], [180, 200], [200, 200]],
+    "source": "Characteristics and size selector on the manufacturer page"
+  },
+  "modelingAssumptions": {
+    "selectedMattressCm": [160, 200],
+    "outerDimensionsAndUpholstery": "Inferred from the supplied front view and the manufacturer's matching side, top and three-quarter views. Not verified engineering dimensions.",
+    "mechanism": "Visual reconstruction from the general lift-base construction photos linked on the manufacturer product page. Pivot positions, arm lengths and opening angle are animation geometry, not a certified hardware specification.",
+    "bedding": "Reconstructed as part of the moving mattress assembly so it stays attached throughout the lift."
+  },
+  "referenceImages": [
+    {"view": "White upholstery, three-quarter", "url": "https://cdn.insales-shop.ru/images/products/1/6761/2455165545/1.jpg"},
+    {"view": "White upholstery and grey piping detail", "url": "https://cdn.insales-shop.ru/images/products/1/6785/2455165569/2.jpg"},
+    {"view": "Front, alternate upholstery", "url": "https://cdn.insales-shop.ru/images/products/1/7113/2455165897/5.jpg"},
+    {"view": "Side, alternate upholstery", "url": "https://cdn.insales-shop.ru/images/products/1/7241/2455166025/6.jpg"},
+    {"view": "Top, alternate upholstery", "url": "https://cdn.insales-shop.ru/images/products/1/7249/2455166033/7.jpg"},
+    {"view": "Manufacturer's general lift-base construction example", "url": "https://cdn.insales-shop.ru/files/1/651/29704843/original/Constructive1-1687174352121.jpg"},
+    {"view": "Manufacturer's general gas spring and linkage detail", "url": "https://cdn.insales-shop.ru/files/1/728/29704920/original/Constructive2-1687174543847.jpg"}
+  ]
+}

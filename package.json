@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node preview.mjs",
     "test": "node --test test/*.test.mjs",
-    "build:bed": "node scripts/build-bed-model.mjs"
+    "build:bed": "node scripts/build-bed-model.mjs",
+    "build:hanna": "node scripts/build-hanna-model.mjs"
   },
   "devDependencies": {
     "@google/model-viewer": "4.4.0",

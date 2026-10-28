@@ -34,3 +34,11 @@ authoring tool only. The final GLB loads on demand and stays under 10 MiB.
 `bed-cloth.blend` is an optional ignored working scene; it is not deployed.
 The model is an illustrative reconstruction from the supplied photograph, not
 manufacturing CAD. The original product photograph remains the default view.
+
+## Hanna lift model
+
+`npm run build:hanna` builds the separate `hanna.glb` from original Hanna / Sensor
+Flit shell, quilt, striped throw, slats and linkage geometry. It reuses the CC0
+normal maps and reshapes the cached pillow mesh. The `Lift` clip is scrubbed by
+the collection section's scroll position. Product reference URLs, confirmed
+dimensions and photographic assumptions are in `hanna-sources.json`.
