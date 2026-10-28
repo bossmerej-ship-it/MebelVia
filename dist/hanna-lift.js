@@ -23,6 +23,23 @@ export function initHannaLift() {
   let lastProgress = -1;
   let duration = 0;
 
+  // A late model response must not move a visitor away from a visible catalogue
+  // anchor. Preserve its screen position while switching the section's height.
+  function changeLayout(change) {
+    let anchor;
+    try {
+      const hash = window.location?.hash;
+      if (hash) anchor = document.getElementById(decodeURIComponent(hash.slice(1)));
+    } catch { /* An invalid fragment is unrelated to the visual scene. */ }
+    const before = anchor?.getBoundingClientRect().top;
+    const keepAnchor = anchor && !section.contains(anchor) && before >= 0 && before < window.innerHeight;
+    change();
+    if (keepAnchor) {
+      const shift = anchor.getBoundingClientRect().top - before;
+      if (shift) window.scrollBy({ top: shift, behavior: 'instant' });
+    }
+  }
+
   function cancelFrame() {
     cancelAnimationFrame(frame);
     frame = 0;
@@ -30,7 +47,7 @@ export function initHannaLift() {
 
   function showPhoto(state) {
     cancelFrame();
-    section.dataset.liftState = state;
+    changeLayout(() => { section.dataset.liftState = state; });
     delete section.dataset.liftProgress;
     viewer.setAttribute('aria-hidden', 'true');
     photo.removeAttribute('aria-hidden');
@@ -68,7 +85,7 @@ export function initHannaLift() {
   function activate() {
     if (!loaded || failed || motion.matches) return;
     viewer.pause();
-    section.dataset.liftState = 'ready';
+    changeLayout(() => { section.dataset.liftState = 'ready'; });
     photo.setAttribute('aria-hidden', 'true');
     viewer.removeAttribute('aria-hidden');
     viewer.jumpCameraToGoal();

@@ -77,7 +77,7 @@ function fixture(reduced = false) {
     for (const [id, callback] of frames) { frames.delete(id); callback(); }
   };
   return {
-    section, viewer, photo, window, motion, frames, timers, flush,
+    section, viewer, photo, window, document, motion, frames, timers, flush,
     near: value => intersect([{ isIntersecting: value }]),
     loaded: () => viewer.dispatchEvent(new Event('load')),
     preference: value => { motion.matches = value; motion.dispatchEvent(new Event('change')); }
@@ -146,4 +146,22 @@ test('reduced motion avoids download and can be changed during the session', () 
   f.preference(false);
   f.flush();
   assert.equal(f.section.dataset.liftState, 'ready');
+});
+
+test('a late response preserves a visible catalogue anchor through height changes', () => {
+  const f = fixture();
+  let scroll = 0;
+  const anchor = {getBoundingClientRect: () => ({top:116 + (f.section.dataset.liftState === 'ready' ? 1400 : 0) - scroll})};
+  f.window.location = {hash:'#beds'};
+  f.window.innerHeight = 1000;
+  f.window.scrollBy = ({top}) => { scroll += top; };
+  f.document.getElementById = () => anchor;
+  f.section.contains = () => false;
+  f.near(true);
+  f.loaded();
+  assert.equal(anchor.getBoundingClientRect().top,116);
+  assert.equal(scroll,1400);
+  f.preference(true);
+  assert.equal(anchor.getBoundingClientRect().top,116);
+  assert.equal(scroll,0);
 });
