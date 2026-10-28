@@ -1,6 +1,7 @@
 import { products, whatsappUrl } from './catalog.js';
 import { productPhotos, initProductPhotos } from './product-photos.js';
 import { initConsultationHint } from './consultation-hint.js';
+import { initBedCarousel } from './bed-carousel.js';
 
 const icon = id => `<svg class="icon" aria-hidden="true"><use href="#i-${id}"/></svg>`;
 const escapeHTML = value => String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -50,6 +51,7 @@ function updateDraft() {
 for (const category of ['bed','mattress']) {
   renderCategory(category);
 }
+initBedCarousel();
 document.addEventListener('click',event => {
   const trigger = event.target.closest('[data-product]');
   if (trigger) openProduct(trigger.dataset.product,trigger);
