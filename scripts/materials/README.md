@@ -39,6 +39,12 @@ manufacturing CAD. The original product photograph remains the default view.
 
 `npm run build:hanna` builds the separate `hanna.glb` from original Hanna / Sensor
 Flit shell, quilt, striped throw, slats and linkage geometry. It reuses the CC0
-normal maps and reshapes the cached pillow mesh. The `Lift` clip is scrubbed by
+normal maps; `hanna-pillows.mjs` reshapes the three CC0 pillow meshes with welded
+vertices, Taubin smoothing and recomputed normals, preserving their organic folds.
+The quilt and throw have padded surfaces with rounded hems. Contact occlusion
+is baked separately inside the fixed and moving groups, so their shadows do
+not stay behind when the mechanism opens. The `Lift` clip is scrubbed by
 the collection section's scroll position. Product reference URLs, confirmed
 dimensions and photographic assumptions are in `hanna-sources.json`.
+Hanna uses the studio HDR with neutral tone mapping and a fixed front camera
+on +Z. Violetta retains its original lighting and interactive camera.

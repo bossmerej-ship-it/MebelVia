@@ -8,12 +8,13 @@
 import {mkdir, readFile, writeFile} from 'node:fs/promises';
 import {resolve, dirname} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {gunzipSync} from 'node:zlib';
 import * as THREE from 'three';
 import {RoundedBoxGeometry} from 'three/addons/geometries/RoundedBoxGeometry.js';
 import {mergeGeometries, mergeVertices} from 'three/addons/utils/BufferGeometryUtils.js';
 import {GLTFExporter} from 'three/addons/exporters/GLTFExporter.js';
 import {PNG} from 'pngjs';
+import {MeshBVH} from 'three-mesh-bvh';
+import {createHannaOrganicPillows} from './hanna-pillows.mjs';
 
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'..');
 const out=resolve(root,'dist/assets/models');
@@ -27,19 +28,19 @@ const upper=new THREE.Group();upper.name='UpperAssembly';scene.add(upper);
 const mechanism=new THREE.Group();mechanism.name='LiftMechanism';scene.add(mechanism);
 const buckets=new Map();
 
-function fabric(name,color,key,roughness=.96){
+function fabric(name,color,key,roughness=.99){
   const m=new THREE.MeshPhysicalMaterial({name,color,roughness,metalness:0,side:THREE.DoubleSide,vertexColors:true,
-    specularIntensity:.18,ior:1.38,sheen:.55,sheenRoughness:.9,sheenColor:0xffffff});
+    specularIntensity:.10,ior:1.34,sheen:.24,sheenRoughness:1,sheenColor:color});
   m.userData={fabric:key};return m;
 }
 const velvet=fabric('Ivory velour',0xf1eee6,'velvet');
 const mattressMat=fabric('White mattress ticking',0xf0f0e9,'cotton');
 const pillowMat=fabric('White linen pillows',0xf5f4ec,'pillow');
 const taupeMat=fabric('Warm grey small pillow',0xaaa69b,'pillow');
-const quiltMat=fabric('Warm grey quilt',0xaaa99a,'cotton');
-const reverseMat=fabric('Folded quilt reverse',0xbab9a9,'cotton');
+const quiltMat=fabric('Warm grey quilt',0x99988c,'cotton');
+const reverseMat=fabric('Folded quilt reverse',0xaaa798,'cotton');
 const stripeMat=fabric('Ivory charcoal striped throw',0xffffff,'stripe');
-const seamMat=fabric('Fine grey upholstered piping',0x797b76,null);
+const seamMat=fabric('Fine grey upholstered piping',0x9e9f95,null);
 const whiteSeam=fabric('Mattress edge stitching',0xd8d9cf,null);
 const wood=new THREE.MeshStandardMaterial({name:'Birch laminated slats',color:0xc5ad83,roughness:.72});
 const inner=new THREE.MeshStandardMaterial({name:'Light storage lining',color:0xe0dfd7,roughness:.92});
@@ -57,15 +58,45 @@ function add(parent,geo,mat,pos=[0,0,0],rot=[0,0,0],uvScale=1){
   if(!buckets.has(parent))buckets.set(parent,new Map());const bin=buckets.get(parent);
   if(!bin.has(mat))bin.set(mat,[]);bin.get(mat).push(g);
 }
+function smoothPositionNormals(geometry){
+  const p=geometry.attributes.position,n=geometry.attributes.normal,keys=[],sums=new Map();
+  for(let i=0;i<p.count;i++){
+    const key=[p.getX(i),p.getY(i),p.getZ(i)].map(value=>Math.round(value*1e5)).join(',');
+    keys.push(key);if(!sums.has(key))sums.set(key,new THREE.Vector3());
+  }
+  const a=new THREE.Vector3(),b=new THREE.Vector3(),c=new THREE.Vector3(),normal=new THREE.Vector3();
+  for(let i=0;i<p.count;i+=3){
+    a.fromBufferAttribute(p,i);b.fromBufferAttribute(p,i+1);c.fromBufferAttribute(p,i+2);
+    normal.crossVectors(b.sub(a),c.sub(a));
+    for(let j=0;j<3;j++)sums.get(keys[i+j]).add(normal);
+  }
+  for(let i=0;i<p.count;i++){
+    const smooth=sums.get(keys[i]);
+    if(smooth.lengthSq()>1e-15){smooth.normalize();n.setXYZ(i,smooth.x,smooth.y,smooth.z);}
+  }
+}
 function box(parent,size,pos,mat,r=.02,rot=[0,0,0],scale=1){
-  const g=new RoundedBoxGeometry(...size,3,Math.min(r,...size.map(v=>v/2)));
+  const g=new RoundedBoxGeometry(...size,mat===velvet?7:3,Math.min(r,...size.map(v=>v/2)));
   // Physical textile coordinates keep the grain tiny and consistent across pieces.
   if(mat.userData.fabric&&mat.userData.fabric!=='stripe'){
     const p=g.attributes.position,n=g.attributes.normal,uv=g.attributes.uv;
     for(let i=0;i<p.count;i++){
       const nx=Math.abs(n.getX(i)),ny=Math.abs(n.getY(i)),nz=Math.abs(n.getZ(i));
       uv.setXY(i,nx>ny&&nx>nz?p.getZ(i):p.getX(i),ny>nx&&ny>nz?p.getZ(i):p.getY(i));
+      if(mat===velvet){
+        // Sub-millimetre padding variation breaks a perfectly moulded surface.
+        // It fades at the perimeter so the photographed silhouette is retained.
+        const x=p.getX(i),y=p.getY(i),z=p.getZ(i);
+        const fade=Math.sin(Math.PI*clamp(x/size[0]+.5))*Math.sin(Math.PI*clamp(y/size[1]+.5));
+        const footPanel=size[0]>1.5&&size[1]<.6&&size[2]<.3;
+        const padding=footPanel&&n.getZ(i)>.6?.007*Math.max(0,fade)**.8*(.9+.1*Math.sin(4*x+3*y)):0;
+        const warp=padding+fade*(.00065*Math.sin(12*x+4*y)+.00045*Math.cos(19*y-7*x)+.0003*Math.sin(29*x+17*y));
+        p.setXYZ(i,x+n.getX(i)*warp,y+n.getY(i)*warp,z+n.getZ(i)*warp);
+      }
     }
+    // Reconcile geometric normals across duplicated UV vertices. Computing
+    // each expanded triangle separately would turn the upholstery into facets.
+    if(mat===velvet)smoothPositionNormals(g);
   }
   add(parent,g,mat,pos,rot,scale);
 }
@@ -79,11 +110,11 @@ function roundedLoop(cx,cy,z,w,h,r){
 }
 
 // The source bed has flat, softly rounded upholstery and a very fine perimeter welt.
-box(fixed,[1.88,1.08,.125],[0,.56,-1.105],velvet,.085,[0,0,0],4);
-tube(fixed,roundedLoop(0,.56,-1.172,1.855,1.055,.075),.0024,seamMat,true,150);
-tube(fixed,roundedLoop(0,.56,-1.040,1.855,1.055,.075),.0022,seamMat,true,150);
-for(const x of [-.875,.875])box(fixed,[.15,.415,2.10],[x,.2275,.02],velvet,.04,[0,0,0],4);
-box(fixed,[1.90,.415,.16],[0,.2275,1.08],velvet,.04,[0,0,0],4);
+box(fixed,[1.88,1.08,.125],[0,.56,-1.105],velvet,.085,[0,0,0],8);
+tube(fixed,roundedLoop(0,.56,-1.172,1.855,1.055,.075),.0017,seamMat,true,150);
+tube(fixed,roundedLoop(0,.56,-1.040,1.855,1.055,.075),.0016,seamMat,true,150);
+for(const x of [-.875,.875])box(fixed,[.15,.415,2.10],[x,.2275,.02],velvet,.04,[0,0,0],8);
+box(fixed,[1.90,.415,.16],[0,.2275,1.08],velvet,.04,[0,0,0],8);
 // Recessed small feet give the specified 2 cm floor clearance without a floating frame.
 for(const x of [-.74,.74])for(const z of [-.88,.87])box(fixed,[.09,.032,.10],[x,.016,z],black,.008);
 box(fixed,[1.58,.035,1.96],[0,.072,0],floorMat,.004);
@@ -143,70 +174,102 @@ function surface(fn,nx,nz,shade=()=>1){
   const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(uvs,2));g.setAttribute('color',new THREE.Float32BufferAttribute(colors,3));g.setIndex(indices);g.computeVertexNormals();return g;
 }
 
-// New Hanna quilt geometry. Drape follows the wide mattress and the photographed
-// sewn border; it is not the duvet mesh from the separate Violetta model.
+const bell=(x,centre,width)=>Math.exp(-(((x-centre)/width)**2));
+// A continuous padded surface, with a separate underside and rounded stitched
+// perimeter. Thickness follows the surface normal even on the hanging sides.
+function paddedSurface(fn,nx,nz,thickness,uvMeters=[1,1]){
+  const base=surface(fn,nx,nz),p=base.attributes.position,n=base.attributes.normal;
+  const top=base.clone(),bottom=base.clone();
+  for(let i=0;i<p.count;i++){
+    for(const [g,sign] of [[top,1],[bottom,-1]]){
+      g.attributes.position.setXYZ(i,p.getX(i)+sign*n.getX(i)*thickness/2,p.getY(i)+sign*n.getY(i)*thickness/2,p.getZ(i)+sign*n.getZ(i)*thickness/2);
+      g.attributes.uv.setXY(i,g.attributes.uv.getX(i)*uvMeters[0],g.attributes.uv.getY(i)*uvMeters[1]);
+    }
+  }
+  for(let i=0;i<bottom.index.count;i+=3){const a=bottom.index.getX(i);bottom.index.setX(i,bottom.index.getX(i+2));bottom.index.setX(i+2,a);}
+  top.computeVertexNormals();bottom.computeVertexNormals();
+  const ring=[];
+  for(let i=0;i<=nx;i++)ring.push(i);
+  for(let j=1;j<=nz;j++)ring.push(j*(nx+1)+nx);
+  for(let i=nx-1;i>=0;i--)ring.push(nz*(nx+1)+i);
+  for(let j=nz-1;j>0;j--)ring.push(j*(nx+1));
+  const rolled=surface((u,v)=>{
+    const a=ring[Math.floor(u*ring.length)%ring.length],b=ring[(Math.floor(u*ring.length)+1)%ring.length];
+    const mix=(u*ring.length)%1,point=new THREE.Vector3().fromBufferAttribute(p,a).lerp(new THREE.Vector3().fromBufferAttribute(p,b),mix);
+    const normal=new THREE.Vector3().fromBufferAttribute(n,a).lerp(new THREE.Vector3().fromBufferAttribute(n,b),mix).normalize();
+    const tangent=new THREE.Vector3().fromBufferAttribute(p,b).sub(new THREE.Vector3().fromBufferAttribute(p,a)).normalize();
+    const outward=new THREE.Vector3().crossVectors(normal,tangent).normalize();
+    return point.addScaledVector(normal,Math.cos(v*Math.PI)*thickness/2).addScaledVector(outward,Math.sin(v*Math.PI)*thickness/2).toArray();
+  },ring.length,6);
+  return mergeGeometries([top,bottom,rolled]);
+}
+
+// Hanna's quilt is supported by the mattress, with softly filled channels,
+// a broad sewn foot border and irregular gravity folds down the side edges.
 function quiltPoint(u,v){
   const across=(u-.5)*2,side=clamp((Math.abs(across)-.78)/.22),a=side*Math.PI/2;
   let x=Math.sign(across)*(.78*Math.min(Math.abs(across)/.78,1)+.205*Math.sin(a));
   let z=-.25+v*1.39;
   const end=clamp((z-.96)/.18),b=end*Math.PI/2;
   if(end>0)z=.96+.145*Math.sin(b);
-  // A corner hangs to one hem depth, rather than adding the two edge drops.
-  let y=.663-.345*(1-Math.cos(a))-.126*(1-Math.cos(b))*Math.cos(a)**2;
+  let y=.664-.345*(1-Math.cos(a))-.126*(1-Math.cos(b))*Math.cos(a)**2;
   const top=Math.cos(a)*Math.cos(b);
-  y+=top*(.014*Math.sin(7*x+2*z)+.010*Math.sin(11*z-3*x)+.007*Math.cos(17*x+7*z));
-  y+=.004*Math.sin(54*x+17*z)*Math.sin(31*z+5*x)*( .35+.65*side );
-  y-=.004*Math.exp(-Math.pow(Math.sin((x+.07)*Math.PI/.40)/.085,2))*top;
-  const border=Math.exp(-Math.pow((v-.89)/.009,2));y-=.009*border;
-  x+=Math.sign(x)*.006*Math.sin(27*z+3*x)*side;z+=.005*Math.sin(34*x)*end;
+  const billow=.025*bell(x,-.52,.22)*bell(z,.47,.75)+.034*bell(x,-.09,.25)*bell(z,.74,.52)+.024*bell(x,.38,.23)*bell(z,.45,.68)+.016*bell(x,.68,.18)*bell(z,.84,.34);
+  const fold=.019*bell(x+.11*z,-.31,.105)*bell(z,.52,.66)-.011*bell(x-.07*z,.04,.055)*bell(z,.60,.46)+.016*bell(x+.16*z,.64,.10)*bell(z,.30,.52);
+  y+=top*(billow+fold+.004*Math.sin(10*z+7*x)*Math.sin(6*x-3*z));
+  // Slightly irregular quilting lines, with rounded filled bays on either side.
+  for(const [line,width] of [[-.55,.026],[-.12,.035],[.48,.023]]){
+    y-=top*.006*bell(x,line+.010*Math.sin(z*6+line*9),width);
+  }
+  const border=bell(v,.905,.012);
+  y-=.010*border*Math.cos(b);z-=.010*border*Math.sin(b);
+  // The filled front border bulges out along its own normal, not only upwards.
+  // Three unequal bays and two relaxed gathers remain readable from the foot.
+  const frontFill=.023*bell(x,-.56,.18)+.030*bell(x,-.10,.25)+.020*bell(x,.45,.15)-.012*bell(x,-.29,.055)-.014*bell(x,.22,.065);
+  z+=Math.sin(b)*Math.cos(a)**2*frontFill;
+  // Short puckers gather toward the hem; the upper quilt stays broad and calm.
+  const hem=bell(v,.956,.075);
+  y+=hem*(.008*bell(x,-.68,.055)-.005*bell(x,-.58,.030)+.011*bell(x,-.19,.085)-.007*bell(x,-.05,.036)+.009*bell(x,.39,.063)-.006*bell(x,.51,.035)+.005*bell(x,.76,.050));
+  y+=side*(.010*Math.sin(10*z+.6)+.005*Math.sin(24*z+1.1))*Math.sin(a);
+  x+=Math.sign(x)*side*(.008*Math.sin(9*z+.8)+.004*Math.cos(19*z));
+  z+=end*(.008*Math.sin(12*x+1)+.003*Math.sin(29*x+2));
   return [x,y,z];
 }
-const quilt=surface((u,v)=>toUpper(quiltPoint(u,v)),110,100,(u,v)=>.96+.04*Math.sin(u*Math.PI)*Math.sin(v*Math.PI));
-add(upper,quilt,quiltMat,[0,0,0],[0,0,0],4);
-for(const side of [0,1])tube(upper,Array.from({length:80},(_,j)=>toUpper(quiltPoint(side,j/79))),.0023,quiltMat,false,100);
-tube(upper,Array.from({length:100},(_,i)=>toUpper(quiltPoint(i/99,1))),.0023,quiltMat,false,130);
+const quilt=paddedSurface((u,v)=>toUpper(quiltPoint(u,v)),112,76,.025,[2.25,1.40]);
+add(upper,quilt,quiltMat,[0,0,0],[0,0,0],8);
+for(const side of [0,1])tube(upper,Array.from({length:80},(_,j)=>toUpper(quiltPoint(side,j/79))),.0012,quiltMat,false,100);
+tube(upper,Array.from({length:100},(_,i)=>toUpper(quiltPoint(i/99,1))),.0013,quiltMat,false,130);
 // The loose turned top edge has a broad soft roll with a slightly uneven silhouette.
-const fold=surface((u,v)=>{
+const fold=paddedSurface((u,v)=>{
   const p=quiltPoint(u,.02+v*.20),x=p[0];p[2]=-.27+v*.31+.018*Math.sin(5*x);
-  p[1]+=.017+.045*Math.sin(v*Math.PI)+.009*Math.sin(15*x+8*v)*Math.sin(v*Math.PI);return toUpper(p);
-},96,32);
-add(upper,fold,reverseMat,[0,0,0],[0,0,0],4);
+  p[1]+=.018+.035*Math.sin(v*Math.PI)+.007*Math.sin(9*x+3*v)*Math.sin(v*Math.PI);return toUpper(p);
+},96,28,.014,[2.2,.32]);
+add(upper,fold,reverseMat,[0,0,0],[0,0,0],8);
 
 // Thin striped throw, loosely bunched over the quilt and longer at the left edge.
 function throwPoint(u,v){
   const side=clamp((Math.abs((u-.5)*2)-.77)/.23),sgn=u<.5?-1:1,a=side*Math.PI/2;
-  const x=sgn*(Math.min(Math.abs((u-.5)*2),.77)+.23*Math.sin(a));
-  const z=.13+v*.49+.09*Math.sin(u*6+.7)+.04*Math.sin(u*21)*(v-.5);
+  const left=1-smooth((u-.02)/.30);
+  const x=sgn*(Math.min(Math.abs((u-.5)*2),.77)+(.23+.045*left)*Math.sin(a));
+  const z=-.03+v*.47+.045*Math.sin(u*6+.7)+.025*Math.sin(u*15+1)*(v-.5)+left*(.70+.18*v);
   const lengthDrop=.26+(.17*(1-smooth((u-.04)/.2)));
-  let y=.714-lengthDrop*(1-Math.cos(a));
+  // The loose rolled back edge supports a visibly sloping band of linen.
+  let y=.758-.075*smooth(v)-lengthDrop*(1-Math.cos(a));
   const flat=Math.cos(a);
-  y+=flat*(.019*Math.sin(19*u+3*v)*Math.sin(Math.PI*v)+.020*Math.sin(33*u+5*v)*Math.sin(Math.PI*v)**2);
-  y+=.012*Math.sin(10*v+8*u)*flat+.005*Math.sin(57*u+9*v);
-  // Extra relaxed fold at the far edge; no stacked or detached strips.
-  y+=.021*Math.exp(-(((v-.88)/.09)**2))*( .65+.35*Math.sin(18*u) );
+  // Different widths and directions keep this a loose woven throw, not an accordion.
+  y+=flat*(.024*bell(u+.08*v,.36,.055)*bell(v,.51,.52)+.030*bell(u-.07*v,.60,.075)*bell(v,.56,.43)+.018*bell(u+.04*v,.77,.06)*bell(v,.34,.40));
+  y+=flat*(.009*Math.sin(13*u+5*v)+.005*Math.sin(29*u-7*v))*Math.sin(Math.PI*v);
+  y+=.004*Math.sin(39*u+6*v)*flat;
+  y+=.018*bell(v,.88,.08)*(.75+.25*Math.sin(11*u+1));
   return [x,y,z];
 }
-add(upper,surface((u,v)=>toUpper(throwPoint(u,v)),170,58),stripeMat);
+add(upper,paddedSurface((u,v)=>toUpper(throwPoint(u,v)),128,40,.005),stripeMat);
 for(const v of [0,1])tube(upper,Array.from({length:125},(_,i)=>toUpper(throwPoint(i/124,v))),.0013,whiteSeam,false,150);
 
-// The CC0 pillow mesh is reshaped and posed for Hanna; only this reusable textile
-// geometry is shared with the old build. All bed, bedding and cloth above are new.
-const pillowSource=JSON.parse(gunzipSync(await readFile(resolve(root,'scripts/materials/bed-cloth.json.gz')))).filter(p=>p.material==='pillow');
-function pillow(piece,targetSize,targetCentre,material){
-  const g=new THREE.BufferGeometry();
-  for(const [name,n] of [['position',3],['normal',3],['uv',2]])g.setAttribute(name,new THREE.Float32BufferAttribute(piece[name],n));
-  g.computeBoundingBox();const bounds=g.boundingBox,size=bounds.getSize(new THREE.Vector3()),centre=bounds.getCenter(new THREE.Vector3());
-  g.translate(-centre.x,-centre.y,-centre.z);g.scale(...targetSize.map((v,k)=>v/size.getComponent(k)));
-  const smoothed=mergeVertices(g,.00001);smoothed.computeVertexNormals();
-  add(upper,smoothed,material,toUpper(targetCentre),[0,0,0],2.5);
-}
-pillow(pillowSource[0],[.77,.415,.300],[-.405,.824,-.718],pillowMat);
-pillow(pillowSource[1],[.77,.415,.300],[.405,.826,-.714],pillowMat);
-pillow(pillowSource[2],[.57,.30,.255],[.012,.793,-.478],taupeMat);
-// White bolster ends are visible behind the large pillows in the source profile.
-for(const x of [-.40,.40]){
-  const g=new THREE.CapsuleGeometry(.083,.56,5,16);g.rotateZ(Math.PI/2);
-  add(upper,g,pillowMat,toUpper([x,.706,-.865]),[0,0,0],3);
+for(const piece of createHannaOrganicPillows()){
+  const material=piece.material==='taupe'?taupeMat:piece.material==='seam'?whiteSeam:pillowMat;
+  piece.geometry.translate(0,-.35,.85);
+  add(upper,piece.geometry,material,[0,0,0],[0,0,0],8);
 }
 
 // Merge per material and rigid parent. These groups remain separate for animation.
@@ -214,6 +277,48 @@ let triangles=0,drawCalls=0;
 for(const [parent,bin] of buckets)for(const [mat,geometries] of bin){
   const g=mergeVertices(mergeGeometries(geometries),.00001);const mesh=new THREE.Mesh(g,mat);
   mesh.name=parent.name+'_'+mat.name.replaceAll(' ','_');parent.add(mesh);triangles+=g.index.count/3;drawCalls++;
+}
+
+// Soft contact occlusion is baked inside each rigid group separately. Pillow /
+// quilt contacts follow the platform, while the fixed shell never retains an
+// obsolete shadow from the lifted mattress. No runtime ray tracing is required.
+for(const parent of [fixed,upper]){
+  const occluders=mergeGeometries(parent.children.map(mesh=>{
+    const g=mesh.geometry.clone();
+    for(const name of Object.keys(g.attributes))if(name!=='position')g.deleteAttribute(name);
+    return g;
+  }));
+  const bvh=new MeshBVH(occluders),ray=new THREE.Ray();
+  const n=new THREE.Vector3(),tangent=new THREE.Vector3(),bitangent=new THREE.Vector3();
+  const up=new THREE.Vector3(0,1,0),right=new THREE.Vector3(1,0,0),count=24;
+  const range=parent===upper?.16:.12,strength=parent===upper?.58:.40;
+  for(const mesh of parent.children){
+    const g=mesh.geometry,p=g.attributes.position,norm=g.attributes.normal,colors=new Uint8Array(p.count*3);
+    for(let i=0;i<p.count;i++){
+      n.fromBufferAttribute(norm,i).normalize();
+      tangent.crossVectors(Math.abs(n.y)<.95?up:right,n).normalize();bitangent.crossVectors(n,tangent);
+      ray.origin.fromBufferAttribute(p,i).addScaledVector(n,.0015);
+      let blocked=0;
+      for(let s=0;s<count;s++){
+        const radius=Math.sqrt((s+.5)/count),angle=s*2.399963229728653;
+        ray.direction.copy(n).multiplyScalar(Math.sqrt(1-radius*radius)).addScaledVector(tangent,radius*Math.cos(angle)).addScaledVector(bitangent,radius*Math.sin(angle));
+        const hit=bvh.raycastFirst(ray,THREE.DoubleSide,0,range);
+        if(hit)blocked+=Math.pow(1-hit.distance/range,1.5);
+      }
+      let shade=clamp(1-strength*blocked/count,.48,1);
+      if(mesh.material===velvet){
+        const x=p.getX(i),y=p.getY(i),z=p.getZ(i);
+        // Directional velvet nap: a restrained 2–3% luminance change, with no
+        // gritty noise or dark patches. Geometry keeps its original silhouette.
+        const weave=.50*Math.sin(11*x+8*y+1.4*Math.sin(5*y+z))+.30*Math.sin(17*x-9*y+Math.sin(4*x+2*z))+.20*Math.sin(31*x+23*y+.7*z);
+        shade*=.974+.025*weave;
+      }
+      const value=Math.round(shade*255);
+      colors.set([value,value,value],i*3);
+    }
+    g.setAttribute('color',new THREE.Uint8BufferAttribute(colors,3,true));
+  }
+  occluders.dispose();
 }
 
 const movers=[];
@@ -301,10 +406,10 @@ function texturePng(kind){
 }
 const textile=texturePng('weave'),stripe=texturePng('stripe');
 const textureDefs=[
-  {name:'velvet',normal:'velvet-normal.jpg',strength:.10,color:textile},
-  {name:'cotton',normal:'cotton-normal.jpg',strength:.13,color:textile},
-  {name:'pillow',normal:'pillow-normal.jpg',strength:.14,color:textile},
-  {name:'stripe',normal:'cotton-normal.jpg',strength:.10,color:stripe},
+  {name:'velvet',normal:'velvet-normal.jpg',strength:.065,color:textile},
+  {name:'cotton',normal:'cotton-normal.jpg',strength:.075,color:textile},
+  {name:'pillow',normal:'cotton-normal.jpg',strength:.055,color:textile},
+  {name:'stripe',normal:'cotton-normal.jpg',strength:.06,color:stripe},
 ];
 const binary=Buffer.from(await new GLTFExporter().parseAsync(scene,{binary:true,animations:[animation]}));
 const jsonLength=binary.readUInt32LE(12),gltf=JSON.parse(binary.subarray(20,20+jsonLength).toString());
@@ -321,7 +426,14 @@ for(const texture of textureDefs){
   if(!embedded.has(baseKey))embedded.set(baseKey,embedImage(texture.color,baseKey+'-color','image/png'));
   if(!embedded.has(texture.normal))embedded.set(texture.normal,embedImage(await readFile(resolve(root,'scripts/materials',texture.normal)),texture.name+'-normal','image/jpeg'));
   const base=embedded.get(baseKey),normal=embedded.get(texture.normal);
-  for(const m of gltf.materials)if(m.extras?.fabric===texture.name){m.pbrMetallicRoughness.baseColorTexture={index:base};m.normalTexture={index:normal,scale:texture.strength};}
+  for(const m of gltf.materials)if(m.extras?.fabric===texture.name){
+    m.pbrMetallicRoughness.baseColorTexture={index:base};m.normalTexture={index:normal,scale:texture.strength};
+    if(texture.name==='stripe'){
+      // Keep the photographic stripe spacing while the linen weave stays tiny.
+      m.normalTexture.extensions={KHR_texture_transform:{scale:[17,4]}};
+      gltf.extensionsUsed??=[];if(!gltf.extensionsUsed.includes('KHR_texture_transform'))gltf.extensionsUsed.push('KHR_texture_transform');
+    }
+  }
 }
 gltf.buffers[0].byteLength=byteLength;
 const json=Buffer.from(JSON.stringify(gltf)),jsonPad=Buffer.alloc((4-json.length%4)%4,0x20),body=Buffer.concat(parts),bodyPad=Buffer.alloc((4-body.length%4)%4);
@@ -330,4 +442,4 @@ const binHeader=Buffer.alloc(8);binHeader.writeUInt32LE(body.length+bodyPad.leng
 const result=Buffer.concat([header,json,jsonPad,binHeader,body,bodyPad]);
 await writeFile(resolve(out,'hanna.glb'),result);
 const bounds=b=>({min:b.min.toArray(),max:b.max.toArray(),size:b.getSize(new THREE.Vector3()).toArray()});
-console.log(JSON.stringify({model:'dist/assets/models/hanna.glb',bytes:result.length,triangles,drawCalls,animation:'Lift',duration:1,boundsClosed:bounds(frameBounds[0]),boundsOpen:bounds(frameBounds[1]),movingBoundsClosed:bounds(movingBounds[0]),movingBoundsOpen:bounds(movingBounds[1]),validation:scene.userData.validation,recommendedCamera:{orbit:'18deg 65deg 6.5m',target:'0m 0.85m 0m',fieldOfView:'30deg'}},null,2));
+console.log(JSON.stringify({model:'dist/assets/models/hanna.glb',bytes:result.length,triangles,drawCalls,animation:'Lift',duration:1,boundsClosed:bounds(frameBounds[0]),boundsOpen:bounds(frameBounds[1]),movingBoundsClosed:bounds(movingBounds[0]),movingBoundsOpen:bounds(movingBounds[1]),validation:scene.userData.validation,recommendedCamera:{orbit:'0deg 85deg 6m',target:'0m 0.85m 0m',fieldOfView:'30deg'}},null,2));
