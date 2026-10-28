@@ -4,7 +4,7 @@ import { products, filterProducts, whatsappUrl } from '../dist/catalog.js';
 import { productPhotos } from '../dist/product-photos.js';
 test('bed model filter selects the matching supplied image and resets to all models',() => {
   assert.deepEqual(filterProducts('bed',{id:'konor'}).map(p=>p.id),['konor']);
-  assert.deepEqual(filterProducts('bed',{}).map(p=>p.id),['violetta','hanna','konor']);
+  assert.deepEqual(filterProducts('bed',{}).map(p=>p.id),['violetta','hanna','konor','tatlin','milano','silvia','seda','soul','monika']);
   assert.equal(filterProducts('bed',{id:'unknown-model'}).length,0);
 });
 test('both sides of a two-sided mattress can be found by firmness',() => {
