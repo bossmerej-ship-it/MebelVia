@@ -20,9 +20,9 @@ function casingFolds(seed){
     const n=folds.length;
     folds.push({edge,at:at+(finger-1)*(.065+.014*Math.sin(seed+n)),
       slope:direction*(.10+.09*finger)+.08*Math.sin(seed+n*2.1),
-      reach:.45+.27*(.5+.5*Math.sin(seed+n*1.7)),
-      width:.026+.015*(.5+.5*Math.cos(seed+n*.9)),
-      depth:.011+.009*(.5+.5*Math.sin(seed+n*2.6))});
+      reach:.28+.20*(.5+.5*Math.sin(seed+n*1.7)),
+      width:.032+.018*(.5+.5*Math.cos(seed+n*.9)),
+      depth:.005+.004*(.5+.5*Math.sin(seed+n*2.6))});
   }
   return folds;
 }
@@ -76,7 +76,7 @@ function makeSoftCase(setting,whiteSupport){
       const d=f.edge==='left'?u+1:f.edge==='right'?1-u:f.edge==='top'?1-v:v+1;
       const along=f.edge==='left'||f.edge==='right'?v:u;
       const centreLine=f.at+f.slope*d+.13*d*d;
-      const width=f.width+.035*d;
+      const width=f.width+.050*d;
       const cross=-bell(along-centreLine,width)+.40*bell(along-centreLine-width*1.5,width*1.7);
       creases+=f.depth*cross*Math.exp(-d/f.reach)*(1-Math.exp(-d*42));
     }
@@ -84,7 +84,7 @@ function makeSoftCase(setting,whiteSupport){
     const casingThickness=.0006*Math.sqrt(Math.max(0,1-radial**24));
     const oldDepth=setting.organic.depth(u*loose,v*loose,side);
     const organic=oldDepth===null?0:clamp(.32*c*(oldDepth-side*.96*filling),-.012,.012)*clamp((1-radial)/.16);
-    const diagonal=-.011*bell(u+.60*v+.30,.048)*bell(v-.26,.47)+.007*bell(u+.60*v+.23,.10)*bell(v-.25,.51);
+    const diagonal=-.0048*bell(u+.60*v+.30,.065)*bell(v-.26,.36)+.0032*bell(u+.60*v+.23,.12)*bell(v-.25,.40);
     let z=side*(c*.96*filling+broad*filling+creases*filling*(side>0?1:.45)+diagonal*filling+casingThickness)+organic+flange;
     // Gentle lean keeps the upper edge relaxed without a tilted, hard sculpt.
     z-=setting.lean*y;
@@ -141,7 +141,7 @@ export function createHannaOrganicPillows(){
     // plane; it cannot bridge into either white case between contact samples.
     return Math.max(z??-Infinity,frontPlane);
   }
-  const taupe=makeSoftCase({name:'HannaSoftTaupe',material:'taupe',size:[.57,.30,.255],centre:[.012,.784,-.498],seed:2.2,lean:.025,organic:organic[2]},whiteSupport);
+  const taupe=makeSoftCase({name:'HannaSoftTaupe',material:'taupe',size:[.57,.33,.255],centre:[.012,.799,-.498],seed:2.2,lean:.025,organic:organic[2]},whiteSupport);
   return [...whites,...taupe];
 }
 
