@@ -128,8 +128,8 @@ export function createHannaOrganicPillows(){
   const source=JSON.parse(gunzipSync(readFileSync(new URL('./materials/bed-cloth.json.gz',import.meta.url)))).filter(piece=>piece.material==='pillow');
   const organic=source.slice(0,3).map(organicField);
   const whites=[
-    {name:'HannaSoftWhiteLeft',material:'white',size:[.77,.415,.300],centre:[-.405,.824,-.710],seed:1.35,lean:.08},
-    {name:'HannaSoftWhiteRight',material:'white',size:[.77,.415,.300],centre:[.405,.826,-.708],seed:3.1,lean:.07}
+    {name:'HannaSoftWhiteLeft',material:'white',size:[.77,.380,.300],centre:[-.405,.810,-.710],seed:1.35,lean:.08},
+    {name:'HannaSoftWhiteRight',material:'white',size:[.77,.380,.300],centre:[.405,.812,-.708],seed:3.1,lean:.07}
   ].flatMap((setting,i)=>makeSoftCase({...setting,organic:organic[i]}));
   const supports=whites.filter(piece=>!piece.name.endsWith('SoftHem')).map(piece=>new MeshBVH(piece.geometry));
   const frontPlane=Math.max(...whites.map(piece=>piece.geometry.boundingBox.max.z));
