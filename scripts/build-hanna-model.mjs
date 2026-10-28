@@ -29,16 +29,16 @@ const upper=new THREE.Group();upper.name='UpperAssembly';scene.add(upper);
 const mechanism=new THREE.Group();mechanism.name='LiftMechanism';scene.add(mechanism);
 const buckets=new Map();
 
-function fabric(name,color,key,roughness=.99){
+function fabric(name,color,key,roughness=.96){
   const m=new THREE.MeshPhysicalMaterial({name,color,roughness,metalness:0,side:THREE.DoubleSide,vertexColors:true,
-    specularIntensity:.10,ior:1.34,sheen:.24,sheenRoughness:1,sheenColor:color});
+    specularIntensity:.24,ior:1.46,sheen:.30,sheenRoughness:1,sheenColor:color});
   m.userData={fabric:key};return m;
 }
-const velvet=fabric('Ivory velour',0xf1eee6,'velvet');
-const mattressMat=fabric('White mattress ticking',0xf0f0e9,'cotton');
-const pillowMat=fabric('White linen pillows',0xf5f4ec,'pillow');
-const taupeMat=fabric('Warm grey small pillow',0xaaa69b,'pillow');
-const quiltMat=fabric('Warm grey quilt',0x99988c,'cotton');
+const velvet=fabric('Ivory velour',0xffffff,'velvet');
+const mattressMat=fabric('White mattress ticking',0xf8f8f2,'cotton');
+const pillowMat=fabric('White linen pillows',0xfafaf5,'pillow');
+const taupeMat=fabric('Warm grey small pillow',0xaaa69f,'pillow');
+const quiltMat=fabric('Warm grey quilt',0xdcdcd8,'quilt');
 const reverseMat=fabric('Folded quilt reverse',0xaaa798,'cotton');
 const stripeMat=fabric('Ivory charcoal striped throw',0xffffff,'stripe');
 const seamMat=fabric('Fine grey upholstered piping',0x9e9f95,null);
@@ -54,7 +54,10 @@ const chrome=new THREE.MeshStandardMaterial({name:'Piston and pivot steel',color
 function add(parent,geo,mat,pos=[0,0,0],rot=[0,0,0],uvScale=1){
   let g=geo.index?geo.toNonIndexed():geo;g.clearGroups();
   if(!g.getAttribute('color'))g.setAttribute('color',new THREE.Float32BufferAttribute(new Float32Array(g.attributes.position.count*3).fill(1),3));
-  const uv=g.attributes.uv;if(uv)for(let i=0;i<uv.count;i++)uv.setXY(i,uv.getX(i)*uvScale,uv.getY(i)*uvScale);
+  // The measured textiles cover about 30 cm per tile. Coordinates on each
+  // fabric piece are metres, so this scale is shared across their surfaces.
+  const textileScale=mat.userData.fabric&&mat.userData.fabric!=='stripe'?1/.30:uvScale;
+  const uv=g.attributes.uv;if(uv)for(let i=0;i<uv.count;i++)uv.setXY(i,uv.getX(i)*textileScale,uv.getY(i)*textileScale);
   g.applyMatrix4(new THREE.Matrix4().compose(new THREE.Vector3(...pos),new THREE.Quaternion().setFromEuler(new THREE.Euler(...rot)),new THREE.Vector3(1,1,1)));
   if(!buckets.has(parent))buckets.set(parent,new Map());const bin=buckets.get(parent);
   if(!bin.has(mat))bin.set(mat,[]);bin.get(mat).push(g);
@@ -76,8 +79,29 @@ function smoothPositionNormals(geometry){
     if(smooth.lengthSq()>1e-15){smooth.normalize();n.setXYZ(i,smooth.x,smooth.y,smooth.z);}
   }
 }
+function subdivideUpholsteryFaces(geometry){
+  // RoundedBoxGeometry spends its subdivisions on the bevels. Its broad faces
+  // are still long triangles, so padding needs a few interior vertices too.
+  const source=geometry.index?geometry.toNonIndexed():geometry;
+  const attributes=['position','normal','uv'],output=Object.fromEntries(attributes.map(key=>[key,[]]));
+  const vertex=i=>Object.fromEntries(attributes.map(key=>[key,Array.from({length:source.attributes[key].itemSize},(_,j)=>source.attributes[key].array[i*source.attributes[key].itemSize+j])]));
+  const midpoint=(a,b)=>Object.fromEntries(attributes.map(key=>[key,a[key].map((v,j)=>(v+b[key][j])/2)]));
+  function split(a,b,c,depth=0){
+    const longest=Math.max(...[[a,b],[b,c],[c,a]].map(([v,w])=>v.position.reduce((sum,x,j)=>sum+(x-w.position[j])**2,0)));
+    if(longest>.12**2&&depth<6&&[a,b,c].every(v=>v.normal[2]>.999)){
+      const ab=midpoint(a,b),bc=midpoint(b,c),ca=midpoint(c,a);
+      split(a,ab,ca,depth+1);split(ab,b,bc,depth+1);split(ca,bc,c,depth+1);split(ab,bc,ca,depth+1);
+    }else for(const v of [a,b,c])for(const key of attributes)output[key].push(...v[key]);
+  }
+  for(let i=0;i<source.attributes.position.count;i+=3)split(vertex(i),vertex(i+1),vertex(i+2));
+  const result=new THREE.BufferGeometry();
+  for(const key of attributes)result.setAttribute(key,new THREE.Float32BufferAttribute(output[key],key==='uv'?2:3));
+  return result;
+}
 function box(parent,size,pos,mat,r=.02,rot=[0,0,0],scale=1){
-  const g=new RoundedBoxGeometry(...size,mat===velvet?7:3,Math.min(r,...size.map(v=>v/2)));
+  const radius=Math.min(r,...size.map(v=>v/2));
+  let g=new RoundedBoxGeometry(...size,mat===velvet?7:3,radius);
+  if(mat===velvet)g=subdivideUpholsteryFaces(g);
   // Physical textile coordinates keep the grain tiny and consistent across pieces.
   if(mat.userData.fabric&&mat.userData.fabric!=='stripe'){
     const p=g.attributes.position,n=g.attributes.normal,uv=g.attributes.uv;
@@ -88,9 +112,10 @@ function box(parent,size,pos,mat,r=.02,rot=[0,0,0],scale=1){
         // Sub-millimetre padding variation breaks a perfectly moulded surface.
         // It fades at the perimeter so the photographed silhouette is retained.
         const x=p.getX(i),y=p.getY(i),z=p.getZ(i);
-        const fade=Math.sin(Math.PI*clamp(x/size[0]+.5))*Math.sin(Math.PI*clamp(y/size[1]+.5));
+        const fade=Math.sin(Math.PI*clamp(x/Math.max(.001,size[0]-2*radius)+.5))*Math.sin(Math.PI*clamp(y/Math.max(.001,size[1]-2*radius)+.5));
         const footPanel=size[0]>1.5&&size[1]<.6&&size[2]<.3;
-        const padding=footPanel&&n.getZ(i)>.6?.007*Math.max(0,fade)**.8*(.9+.1*Math.sin(4*x+3*y)):0;
+        const headPanel=size[0]>1.5&&size[1]>.8;
+        const padding=n.getZ(i)>.6&&(footPanel||headPanel)?(footPanel?.010:.006)*Math.max(0,fade)**.8*(.9+.1*Math.sin(4*x+3*y)):0;
         const warp=padding+fade*(.00065*Math.sin(12*x+4*y)+.00045*Math.cos(19*y-7*x)+.0003*Math.sin(29*x+17*y));
         p.setXYZ(i,x+n.getX(i)*warp,y+n.getY(i)*warp,z+n.getZ(i)*warp);
       }
@@ -170,11 +195,25 @@ tube(upper,[[-.07,.367,.98],[-.07,.353,1.035],[.07,.353,1.035],[.07,.367,.98]].m
 // Cache coordinates are the closed bed's world axes; all textile meshes then
 // attach to the unchanged rigid platform for the existing lift animation.
 const cloth=JSON.parse(gunzipSync(await readFile(resolve(root,'scripts/materials/hanna-cloth.json.gz'))));
+function remapSeam(value,source,target){
+  for(let i=1;i<source.length;i++)if(value<=source[i])return THREE.MathUtils.lerp(target[i-1],target[i],clamp((value-source[i-1])/(source[i]-source[i-1])));
+  return 1;
+}
 for(const piece of cloth){
   const g=new THREE.BufferGeometry();
   g.setAttribute('position',new THREE.Float32BufferAttribute(piece.position,3));
   g.setAttribute('normal',new THREE.Float32BufferAttribute(piece.normal,3));
   g.setAttribute('uv',new THREE.Float32BufferAttribute(piece.uv,2));
+  if(piece.material==='quilt'){
+    const colourUv=[];
+    for(let i=0;i<piece.uv.length;i+=2){
+      colourUv.push(remapSeam(piece.uv[i]/2.23,[0,.14,.275,.415,.56,.71,.855,1],[0,.147,.286,.43,.57,.715,.854,1]),
+        remapSeam(piece.uv[i+1]/1.36,[0,.34,.615,.935,1],[0,.35,.66,.91,1]));
+    }
+    // A dedicated map follows the sewn cells; the weave/roughness retains its
+    // separate, physically sized coordinates rather than stretching with it.
+    g.setAttribute('uv1',new THREE.Float32BufferAttribute(colourUv,2));
+  }
   g.translate(0,-.35,.85);
   const material=piece.material==='stripe'?stripeMat:piece.material==='reverse'?reverseMat:quiltMat;
   add(upper,g,material,[0,0,0],[0,0,0],piece.material==='stripe'?1:8);
@@ -320,10 +359,11 @@ function texturePng(kind){
 }
 const textile=texturePng('weave'),stripe=texturePng('stripe');
 const textureDefs=[
-  {name:'velvet',normal:'velvet-normal.jpg',strength:.065,color:textile},
-  {name:'cotton',normal:'cotton-normal.jpg',strength:.075,color:textile},
-  {name:'pillow',normal:'cotton-normal.jpg',strength:.055,color:textile},
-  {name:'stripe',normal:'cotton-normal.jpg',strength:.06,color:stripe},
+  {name:'velvet',normal:'velvet-normal.jpg',rough:'velvet-rough.jpg',strength:.16,color:await readFile(resolve(root,'scripts/materials/hanna-ivory-velour-albedo-v2.jpg')),mime:'image/jpeg'},
+  {name:'quilt',normal:'cotton-normal.jpg',rough:'cotton-rough.jpg',strength:.24,color:await readFile(resolve(root,'scripts/materials/hanna-grey-quilt-albedo.jpg')),mime:'image/jpeg'},
+  {name:'cotton',normal:'cotton-normal.jpg',rough:'cotton-rough.jpg',strength:.24,color:textile},
+  {name:'pillow',normal:'cotton-normal.jpg',rough:'cotton-rough.jpg',strength:.22,color:textile},
+  {name:'stripe',normal:'cotton-normal.jpg',rough:'cotton-rough.jpg',strength:.22,color:stripe},
 ];
 const binary=Buffer.from(await new GLTFExporter().parseAsync(scene,{binary:true,animations:[animation]}));
 const jsonLength=binary.readUInt32LE(12),gltf=JSON.parse(binary.subarray(20,20+jsonLength).toString());
@@ -336,15 +376,25 @@ function embedImage(bytes,name,mimeType){
 }
 const embedded=new Map();
 for(const texture of textureDefs){
-  const baseKey=texture.name==='stripe'?'stripe':'weave';
-  if(!embedded.has(baseKey))embedded.set(baseKey,embedImage(texture.color,baseKey+'-color','image/png'));
+  const baseKey=texture.name==='velvet'?'ivory-velour':texture.name==='quilt'?'grey-quilt':texture.name==='stripe'?'stripe':'weave';
+  if(!embedded.has(baseKey))embedded.set(baseKey,embedImage(texture.color,baseKey+'-color',texture.mime??'image/png'));
   if(!embedded.has(texture.normal))embedded.set(texture.normal,embedImage(await readFile(resolve(root,'scripts/materials',texture.normal)),texture.name+'-normal','image/jpeg'));
-  const base=embedded.get(baseKey),normal=embedded.get(texture.normal);
+  if(!embedded.has(texture.rough))embedded.set(texture.rough,embedImage(await readFile(resolve(root,'scripts/materials',texture.rough)),texture.name+'-roughness','image/jpeg'));
+  const base=embedded.get(baseKey),normal=embedded.get(texture.normal),rough=embedded.get(texture.rough);
   for(const m of gltf.materials)if(m.extras?.fabric===texture.name){
     m.pbrMetallicRoughness.baseColorTexture={index:base};m.normalTexture={index:normal,scale:texture.strength};
+    if(texture.name==='quilt')m.pbrMetallicRoughness.baseColorTexture.texCoord=1;
+    m.pbrMetallicRoughness.metallicRoughnessTexture={index:rough};
+    if(texture.name==='velvet'){
+      // The colour scan covers 60 cm; the measured normal/roughness covers 30 cm.
+      m.pbrMetallicRoughness.baseColorTexture.extensions={KHR_texture_transform:{scale:[.5,.5]}};
+    }
     if(texture.name==='stripe'){
       // Keep the photographic stripe spacing while the linen weave stays tiny.
-      m.normalTexture.extensions={KHR_texture_transform:{scale:[17,4]}};
+      m.normalTexture.extensions={KHR_texture_transform:{scale:[7.5,1.6]}};
+      m.pbrMetallicRoughness.metallicRoughnessTexture.extensions={KHR_texture_transform:{scale:[7.5,1.6]}};
+    }
+    if(texture.name==='velvet'||texture.name==='stripe'){
       gltf.extensionsUsed??=[];if(!gltf.extensionsUsed.includes('KHR_texture_transform'))gltf.extensionsUsed.push('KHR_texture_transform');
     }
   }
