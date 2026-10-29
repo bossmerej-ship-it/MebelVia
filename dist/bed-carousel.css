@@ -1,24 +1,30 @@
 @layer responsive {
+  #beds.container{--beds-gutter:clamp(16px,2.5vw,48px);--beds-gap:clamp(14px,1.2vw,24px);width:calc(100% - var(--beds-gutter) - var(--beds-gutter));max-width:none}
   #beds .section-heading{flex-direction:row;align-items:center}
   .catalog-controls{display:flex;gap:10px;flex-shrink:0}
   .catalog-arrow{display:grid;place-items:center;width:46px;height:46px;padding:0;border:1px solid var(--line);border-radius:50%;background:#fff;transition:background .18s,border-color .18s,opacity .18s}
   .catalog-arrow-prev .icon{transform:rotate(180deg)}
   .catalog-arrow:hover:not(:disabled){background:var(--soft);border-color:#cbbba7}
   .catalog-arrow:disabled{opacity:.3}
-  .bed-carousel{grid-template-columns:none;grid-auto-flow:column;grid-auto-columns:calc((100% - 44px)/3);gap:22px;overflow-x:auto;overflow-y:hidden;min-width:0;padding:4px 0 14px;scroll-snap-type:x mandatory;scrollbar-width:none}
-  .bed-carousel>.product-card{min-width:0;scroll-snap-align:start}
+  .bed-carousel{grid-template-columns:none;grid-auto-flow:column;grid-auto-columns:min(560px,calc((100% - var(--beds-gap) - var(--beds-gap))/3));gap:var(--beds-gap);overflow-x:auto;overflow-y:hidden;min-width:0;padding:4px 0 14px;scroll-snap-type:none;scroll-behavior:auto;scrollbar-width:none}
+  .bed-carousel>.product-card{display:flex;flex-direction:column;min-width:0;scroll-snap-align:none}
+  #beds .photo-button{aspect-ratio:4/3}
+  #beds :is(.product-photo,.product-secondary){object-fit:contain;padding:clamp(10px,1vw,18px)}
+  #beds .product-info{display:flex;flex:1;flex-direction:column;padding:clamp(16px,1.5vw,24px)}
+  #beds .product-info h3{font-size:clamp(18px,1.2vw,22px);line-height:1.25;min-height:2.5em}
+  #beds .product-meta{font-size:clamp(14px,.9vw,15px);line-height:1.5;min-height:1.5em;margin:10px 0 14px}
+  #beds .details-button{align-self:flex-start;min-height:44px;margin-top:auto;font-size:14px}
   .bed-carousel{overflow-anchor:none;overscroll-behavior-x:contain}
   .bed-carousel.is-recentering{scroll-snap-type:none;scroll-behavior:auto}
   .bed-carousel::-webkit-scrollbar{display:none}
   .bed-carousel:focus-visible{outline-offset:4px}
   @media(max-width:1100px){
-    .bed-carousel{grid-auto-columns:calc((100% - 32px)/3);gap:16px}
+    .bed-carousel{grid-auto-columns:calc((100% - var(--beds-gap))/2)}
   }
   @media(max-width:760px){
-    .bed-carousel{grid-auto-columns:calc((100% - 16px)/2)}
     .catalog-arrow{width:44px;height:44px}
   }
   @media(max-width:560px){
-    .bed-carousel{grid-auto-columns:88%}
+    .bed-carousel{grid-auto-columns:min(88%,380px)}
   }
 }
