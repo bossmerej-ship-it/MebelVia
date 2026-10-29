@@ -1,0 +1,289 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import vm from 'node:vm';
+
+const source = readFileSync(new URL('../dist/reveal.js', import.meta.url), 'utf8')
+  .replace('export function initReveals', 'function initReveals');
+
+// The fixture models the real section hierarchy, clipping in the horizontal
+// catalogue, observer delivery, and cancellable Web Animations without a GPU.
+function fixture({ reduced = false, scroll = 0, noObserver = false, noAnimate = false, observerError = false, animateError = false } = {}) {
+  let now = 1000;
+  const window = new EventTarget();
+  Object.assign(window, { innerHeight: 800, innerWidth: 1200, scrollY: scroll, location: { hash: '' } });
+  const document = new EventTarget();
+  Object.assign(document, { readyState: 'loading', hidden: false });
+  const motion = new EventTarget();
+  motion.matches = reduced;
+  const effects = [], observers = [];
+  let firstBedAnimationSawAllMarked;
+  let horizontal = 0;
+
+  class Element extends EventTarget {
+    constructor(tag, { id = '', classes = '', top = 1600, left = 0, width = 300, height = 60, href } = {}) {
+      super();
+      Object.assign(this, { tag, id, classes: new Set(classes.split(' ').filter(Boolean)), top, left, width, height, href, children: [], parentElement: null, dataset: {}, hidden: false });
+      this.style = { opacity: '', translate: '', transform: '', visibility: '' };
+    }
+    append(child) { this.children.push(child); child.parentElement = this; return child; }
+    contains(target) { return target === this || this.children.some(child => child.contains(target)); }
+    matches(selector) {
+      if (selector === 'a[href^="#"]') return this.tag === 'a' && this.href?.startsWith('#');
+      if (selector.startsWith('#')) return this.id === selector.slice(1);
+      if (selector.startsWith('.')) return this.classes.has(selector.slice(1));
+      return this.tag === selector;
+    }
+    closest(selector) { return this.matches(selector) ? this : this.parentElement?.closest(selector); }
+    querySelectorAll(selector) {
+      const descendants = [];
+      const visit = parent => parent.children.forEach(child => { descendants.push(child); visit(child); });
+      visit(this);
+      return descendants.filter(node => selector.split(',').some(part => {
+        const item = part.trim();
+        if (item.includes('>')) {
+          const [parent, child] = item.split('>').map(value => value.trim());
+          return node.matches(child) && node.parentElement?.matches(parent);
+        }
+        const pieces = item.split(/\s+/);
+        return pieces.length === 2
+          ? node.matches(pieces[1]) && node.parentElement?.closest(pieces[0])
+          : node.matches(item);
+      }));
+    }
+    getBoundingClientRect() {
+      const left = this.parentElement?.id === 'bed-grid'
+        ? this.parentElement.children.indexOf(this) * 400 - horizontal : this.left;
+      const top = this.top - window.scrollY;
+      return { top, bottom: top + this.height, left, right: left + this.width, width: this.width, height: this.height };
+    }
+    animate(frames, options) {
+      if (this.parentElement?.id === 'bed-grid' && firstBedAnimationSawAllMarked === undefined) {
+        firstBedAnimationSawAllMarked = this.parentElement.children.every(card => card.dataset.revealState === 'done');
+      }
+      if (animateError) throw new Error('Animation API unavailable');
+      let resolve, reject;
+      const animation = {
+        cancelled: false,
+        finished: new Promise((yes, no) => { resolve = yes; reject = no; }),
+        cancel() { this.cancelled = true; reject(new Error('Animation cancelled')); },
+        finish() { resolve(); }
+      };
+      effects.push({ element: this, frames, options, animation });
+      return animation;
+    }
+  }
+  if (noAnimate) Element.prototype.animate = undefined;
+
+  const main = new Element('main', { id: 'top', top: 0, width: 1200, height: 6000 });
+  const hero = main.append(new Element('section', { classes: 'hero', top: 0 }));
+  const heroTitle = hero.append(new Element('h1', { id: 'hero-title', top: 70 }));
+  const heroActions = hero.append(new Element('div', { classes: 'hero-actions', top: 220 }));
+  const anchorLink = heroActions.append(new Element('a', { top: 220, href: '#beds' }));
+  const heroImage = hero.append(new Element('img', { classes: 'bed-photo', top: 0 }));
+  const collection = main.append(new Element('section', { classes: 'collection-section', top: 900 }));
+  const copy = collection.append(new Element('div', { classes: 'collection-copy', top: 950 }));
+  const heading = copy.append(new Element('h2', { top: 980 }));
+  const description = copy.append(new Element('p', { top: 1060 }));
+  const action = copy.append(new Element('a', { classes: 'collection-link', top: 1130, href: '#beds' }));
+  const actionIcon = action.append(new Element('svg', { top: 1130 }));
+  const scene = collection.append(new Element('div', { classes: 'collection-visual', top: 900 }));
+  const hanna = scene.append(new Element('model-viewer', { id: 'hanna-bed', top: 900 }));
+  const fallback = scene.append(new Element('img', { classes: 'collection-image', top: 900 }));
+  const beds = main.append(new Element('section', { id: 'beds', top: 1750 }));
+  const bedsTitle = beds.append(new Element('h2', { id: 'beds-title', top: 1780 }));
+  const track = beds.append(new Element('div', { id: 'bed-grid', top: 1880, width: 1200, height: 500 }));
+  const cards = Array.from({ length: 9 }, (_, index) => track.append(new Element('article', { id: `bed-${index}`, classes: 'product-card', top: 1880, width: 400, height: 500 })));
+  const mattresses = main.append(new Element('section', { id: 'mattresses', top: 2550 }));
+  const mattressTitle = mattresses.append(new Element('h2', { id: 'mattresses-title', top: 2600 }));
+  const mattressGrid = mattresses.append(new Element('div', { id: 'mattress-grid', top: 2700 }));
+  const mattressCards = Array.from({ length: 3 }, (_, index) => mattressGrid.append(new Element('article', { classes: 'product-card', top: 2700, left: index * 400 })));
+  const deliveryTitle = main.append(new Element('h2', { id: 'delivery-title', top: 3300 }));
+  const image = main.append(new Element('img', { classes: 'delivery-porter', top: 3350 }));
+  const faq = main.append(new Element('div', { id: 'faq', classes: 'faq', top: 3600 }));
+  faq.append(new Element('h2', { top: 3600 }));
+  const rows = Array.from({ length: 3 }, (_, index) => faq.append(new Element('details', { top: 3700 + index * 100 })));
+  const consultation = main.append(new Element('div', { classes: 'consultation', top: 4000 }));
+  consultation.append(new Element('h2', { top: 4000 }));
+  const consultationAction = consultation.append(new Element('a', { classes: 'button', top: 4200 }));
+
+  document.querySelector = selector => selector === 'main' ? main : null;
+  document.getElementById = id => id === 'top' ? main : main.querySelectorAll(`#${id}`)[0];
+  class IntersectionObserver {
+    constructor(callback, options) {
+      if (observerError) throw new Error('Observer creation failed');
+      this.callback = callback; this.options = options; this.observed = new Set(); observers.push(this);
+    }
+    observe(element) { this.observed.add(element); }
+    unobserve(element) { this.observed.delete(element); }
+    disconnect() { this.disconnected = true; this.observed.clear(); }
+  }
+  window.IntersectionObserver = noObserver ? undefined : IntersectionObserver;
+  const context = { document, window, Element, IntersectionObserver, matchMedia: () => motion, performance: { now: () => now } };
+  vm.runInNewContext(source, context);
+  const dispose = context.initReveals();
+
+  function event(type, target, properties = {}, surface = document) {
+    const value = new Event(type);
+    Object.defineProperty(value, 'target', { value: target });
+    Object.assign(value, properties);
+    surface.dispatchEvent(value);
+  }
+  return {
+    main, heroTitle, heroImage, heading, description, action, actionIcon, beds, bedsTitle, track, cards, mattressTitle, mattressCards, deliveryTitle, image, rows, consultationAction, hanna, fallback,
+    effects, observers, document, window, motion, dispose,
+    firstBedMarked: () => firstBedAnimationSawAllMarked,
+    enter(...elements) { observers[0]?.callback(elements.map(target => ({ target, isIntersecting: true, boundingClientRect: target.getBoundingClientRect() }))); },
+    advance(ms) { now += ms; },
+    scroll(y, ms = 16) { now += ms; window.scrollY = y; window.dispatchEvent(new Event('scroll')); },
+    interaction(type, target) { event(type, target); },
+    clickAnchor() { event('click', anchorLink); },
+    hash(value) { window.location.hash = value; window.dispatchEvent(new Event('hashchange')); },
+    reduced(value) { motion.matches = value; event('change', motion, { matches: value }, motion); },
+    visible(value) { document.hidden = !value; document.dispatchEvent(new Event('visibilitychange')); },
+    recycle() { track.children.push(track.children.shift()); horizontal = 0; }
+  };
+}
+
+function assertNaturalStyles(...elements) {
+  for (const element of elements) {
+    assert.equal(element.hidden, false);
+    assert.deepEqual(element.style, { opacity: '', translate: '', transform: '', visibility: '' });
+  }
+}
+
+test('missing animation capabilities and observer initialization failure leave content visible', () => {
+  for (const options of [{ noObserver: true }, { noAnimate: true }, { observerError: true }, { animateError: true }]) {
+    const f = fixture(options);
+    f.enter(f.heading, f.track);
+    assert.equal(f.effects.length, 0);
+    assertNaturalStyles(f.heroTitle, f.heading, f.track, ...f.cards, f.hanna, f.fallback);
+    assert.doesNotThrow(f.dispose);
+  }
+});
+
+test('already visible or passed content stays painted and Hanna scene nodes are never observed', () => {
+  const f = fixture({ scroll: 2000 });
+  assert.equal(f.effects.length, 0);
+  for (const element of [f.heroTitle, f.heroImage, f.heading, f.track, ...f.cards]) {
+    assert.equal(element.dataset.revealState, 'done');
+    assert.equal(f.observers[0].observed.has(element), false);
+  }
+  for (const element of [f.hanna, f.fallback]) {
+    assert.equal(element.dataset.revealState, undefined);
+    assert.equal(f.observers[0].observed.has(element), false);
+  }
+  assertNaturalStyles(f.heroTitle, f.heading, f.hanna, f.fallback);
+});
+
+test('text, actions, images and card batches use bounded motion without replacing hover transforms', () => {
+  const f = fixture();
+  f.enter(f.heading, f.description, f.action, f.image, ...f.mattressCards, ...f.rows);
+  assert.equal(f.effects.length, 10);
+  for (const { frames, options } of f.effects) {
+    assert.ok(options.duration >= 450 && options.duration <= 700);
+    assert.ok(options.delay >= 0 && options.delay <= 120);
+    assert.equal(options.fill, 'backwards');
+    assert.match(options.easing, /cubic-bezier/);
+    assert.ok(frames.every(frame => !('transform' in frame) && !('scale' in frame) && !('rotate' in frame)));
+    assert.equal(frames[0].opacity, 0);
+    assert.equal(frames.at(-1).opacity, 1);
+    if ('translate' in frames[0]) assert.match(frames[0].translate, /^0 (12|16|18)px$/);
+  }
+  const image = f.effects.find(effect => effect.element === f.image);
+  assert.ok(image.frames.every(frame => !('translate' in frame)));
+  assert.deepEqual(f.effects.filter(effect => f.mattressCards.includes(effect.element)).map(effect => effect.options.delay), [0, 60, 120]);
+  const count = f.effects.length;
+  f.enter(f.heading, f.image, ...f.mattressCards);
+  assert.equal(f.effects.length, count, 'returning to a section must not restart its reveal');
+});
+
+test('all nine original bed cards are marked before the visible batch animates and recycling never restarts it', () => {
+  const f = fixture();
+  f.enter(f.track);
+  assert.equal(f.firstBedMarked(), true);
+  assert.deepEqual(f.effects.map(effect => effect.element), f.cards.slice(0, 3));
+  assert.deepEqual(f.effects.map(effect => effect.options.delay), [0, 60, 120]);
+  assert.ok(f.cards.every(card => card.dataset.revealState !== 'pending' && card.dataset.revealState));
+  for (let index = 0; index < 27; index++) { f.recycle(); f.enter(f.track, ...f.cards); }
+  assert.equal(f.effects.length, 3);
+  assert.equal(f.track.children.length, 9);
+  assert.deepEqual(new Set(f.track.children), new Set(f.cards));
+  assertNaturalStyles(...f.cards);
+});
+
+test('reduced motion starts immediately and turning it on cancels active effects and future reveals', () => {
+  const initial = fixture({ reduced: true });
+  assert.equal(initial.observers.length, 0);
+  assert.equal(initial.effects.length, 0);
+  assert.ok(initial.cards.every(card => card.dataset.revealState === 'done'));
+  const f = fixture();
+  f.enter(f.heading, f.track);
+  f.reduced(true);
+  assert.ok(f.effects.every(effect => effect.animation.cancelled));
+  assert.equal(f.observers[0].disconnected, true);
+  const count = f.effects.length;
+  f.enter(f.image, ...f.mattressCards);
+  assert.equal(f.effects.length, count);
+  assertNaturalStyles(f.heading, ...f.cards, ...f.mattressCards);
+});
+
+test('fast vertical scrolling cancels current effects and skips reveals while the visitor passes', () => {
+  const f = fixture();
+  f.enter(f.heading);
+  f.scroll(1000, 20);
+  assert.equal(f.effects[0].animation.cancelled, true);
+  f.enter(f.description);
+  assert.equal(f.description.dataset.revealState, 'done');
+  assert.equal(f.effects.length, 1);
+  f.advance(300);
+  f.enter(f.action);
+  assert.equal(f.effects.length, 2, 'later unvisited content may reveal after fast scrolling stops');
+});
+
+test('section links and hash targets become usable immediately, including the whole bed catalogue', () => {
+  const f = fixture();
+  f.enter(f.heading);
+  f.clickAnchor();
+  assert.equal(f.effects[0].animation.cancelled, true);
+  f.enter(f.mattressTitle);
+  assert.equal(f.effects.length, 1);
+  f.hash('#beds');
+  assert.equal(f.bedsTitle.dataset.revealState, 'done');
+  assert.ok(f.cards.every(card => card.dataset.revealState === 'done'));
+  f.enter(f.track);
+  assert.equal(f.effects.length, 1);
+  assert.doesNotThrow(() => f.hash('#%invalid'));
+});
+
+test('focus or pointer input finishes a containing reveal and prevents a pending action from hiding', () => {
+  for (const type of ['focusin', 'pointerdown']) {
+    const f = fixture();
+    f.enter(f.action);
+    f.interaction(type, f.actionIcon);
+    assert.equal(f.effects[0].animation.cancelled, true);
+    assert.equal(f.action.dataset.revealState, 'done');
+    f.interaction(type, f.consultationAction);
+    f.enter(f.consultationAction);
+    assert.equal(f.effects.length, 1);
+    assertNaturalStyles(f.action, f.consultationAction);
+  }
+});
+
+test('hidden documents and disposal cancel active animations without retaining hidden inline styles', async () => {
+  const f = fixture();
+  f.enter(f.heading, f.image);
+  f.visible(false);
+  assert.ok(f.effects.every(effect => effect.animation.cancelled));
+  f.visible(true);
+  f.enter(f.action);
+  const action = f.effects.at(-1);
+  action.animation.finish();
+  await Promise.resolve();
+  assert.equal(f.action.dataset.revealState, 'done');
+  f.enter(f.description);
+  f.dispose();
+  assert.ok(f.effects.every(effect => effect.animation.cancelled));
+  assert.equal(f.observers[0].disconnected, true);
+  assertNaturalStyles(f.heading, f.image, f.action, f.description, ...f.cards);
+});
