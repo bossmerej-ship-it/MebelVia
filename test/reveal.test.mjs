@@ -8,12 +8,12 @@ const source = readFileSync(new URL('../dist/reveal.js', import.meta.url), 'utf8
 
 // The fixture models the real section hierarchy, clipping in the horizontal
 // catalogue, observer delivery, and cancellable Web Animations without a GPU.
-function fixture({ reduced = false, scroll = 0, noObserver = false, noAnimate = false, observerError = false, animateError = false } = {}) {
-  let now = 1000;
+function fixture({ reduced = false, scroll = 0, startTime = 1000, hash = '', hidden = false, noObserver = false, noAnimate = false, observerError = false, animateError = false } = {}) {
+  let now = startTime;
   const window = new EventTarget();
-  Object.assign(window, { innerHeight: 800, innerWidth: 1200, scrollY: scroll, location: { hash: '' } });
+  Object.assign(window, { innerHeight: 800, innerWidth: 1200, scrollY: scroll, location: { hash } });
   const document = new EventTarget();
-  Object.assign(document, { readyState: 'loading', hidden: false });
+  Object.assign(document, { readyState: 'loading', hidden });
   const motion = new EventTarget();
   motion.matches = reduced;
   const effects = [], observers = [];
@@ -130,7 +130,7 @@ function fixture({ reduced = false, scroll = 0, noObserver = false, noAnimate = 
     surface.dispatchEvent(value);
   }
   return {
-    main, heroTitle, heroImage, heading, description, action, actionIcon, beds, bedsTitle, track, cards, mattressTitle, mattressCards, deliveryTitle, image, rows, consultationAction, hanna, fallback,
+    main, heroTitle, heroImage, anchorLink, heading, description, action, actionIcon, beds, bedsTitle, track, cards, mattressTitle, mattressCards, deliveryTitle, image, rows, consultationAction, hanna, fallback,
     effects, observers, document, window, motion, dispose,
     firstBedMarked: () => firstBedAnimationSawAllMarked,
     enter(...elements) { observers[0]?.callback(elements.map(target => ({ target, isIntersecting: true, boundingClientRect: target.getBoundingClientRect() }))); },
@@ -176,23 +176,69 @@ test('already visible or passed content stays painted and Hanna scene nodes are 
   assertNaturalStyles(f.heroTitle, f.heading, f.hanna, f.fallback);
 });
 
+test('a fresh opening at the top visibly introduces the hero and input can finish it immediately', () => {
+  const f = fixture({ startTime: 100 });
+  assert.deepEqual(new Set(f.effects.map(effect => effect.element)), new Set([f.heroTitle, f.anchorLink, f.heroImage]));
+  assert.equal(f.heroTitle.dataset.revealState, 'running');
+  assert.equal(f.anchorLink.dataset.revealState, 'running');
+  const title = f.effects.find(effect => effect.element === f.heroTitle);
+  const action = f.effects.find(effect => effect.element === f.anchorLink);
+  f.interaction('focusin', f.heroTitle);
+  assert.equal(title.animation.cancelled, true);
+  f.interaction('pointerdown', f.anchorLink);
+  assert.equal(action.animation.cancelled, true);
+  assertNaturalStyles(f.heroTitle, f.anchorLink, f.heroImage);
+  f.dispose();
+});
+
+test('restored positions, section links, late initialization and hidden tabs never restart the hero', () => {
+  for (const options of [
+    { startTime: 100, scroll: 120 },
+    { startTime: 100, hash: '#beds' },
+    { startTime: 900 },
+    { startTime: 2000 },
+    { startTime: 100, hidden: true }
+  ]) {
+    const f = fixture(options);
+    assert.equal(f.effects.length, 0);
+    assert.equal(f.heroTitle.dataset.revealState, 'done');
+    assert.equal(f.heroImage.dataset.revealState, 'done');
+    assertNaturalStyles(f.heroTitle, f.anchorLink, f.heroImage);
+    f.dispose();
+  }
+});
+
+test('scroll reveals wait until elements enter the viewport rather than finishing below it', () => {
+  const f = fixture();
+  assert.equal(f.observers[0].options.rootMargin, '0px 0px -32px');
+  assert.equal(f.observers[0].options.threshold, .06);
+  assert.equal(f.observers[0].observed.has(f.heading), true);
+  assert.equal(f.heading.dataset.revealState, 'pending');
+  f.enter(f.heading);
+  assert.equal(f.heading.dataset.revealState, 'running');
+  assert.equal(f.effects[0].options.duration, 650);
+});
+
 test('text, actions, images and card batches use bounded motion without replacing hover transforms', () => {
   const f = fixture();
   f.enter(f.heading, f.description, f.action, f.image, ...f.mattressCards, ...f.rows);
   assert.equal(f.effects.length, 10);
   for (const { frames, options } of f.effects) {
     assert.ok(options.duration >= 450 && options.duration <= 700);
-    assert.ok(options.delay >= 0 && options.delay <= 120);
+    assert.ok(options.delay >= 0 && options.delay <= 140);
     assert.equal(options.fill, 'backwards');
     assert.match(options.easing, /cubic-bezier/);
     assert.ok(frames.every(frame => !('transform' in frame) && !('scale' in frame) && !('rotate' in frame)));
     assert.equal(frames[0].opacity, 0);
     assert.equal(frames.at(-1).opacity, 1);
-    if ('translate' in frames[0]) assert.match(frames[0].translate, /^0 (12|16|18)px$/);
+    if ('translate' in frames[0]) {
+      const distance = Number(frames[0].translate.match(/^0 (\d+)px$/)?.[1]);
+      assert.ok(distance >= 12 && distance <= 24);
+    }
   }
   const image = f.effects.find(effect => effect.element === f.image);
   assert.ok(image.frames.every(frame => !('translate' in frame)));
-  assert.deepEqual(f.effects.filter(effect => f.mattressCards.includes(effect.element)).map(effect => effect.options.delay), [0, 60, 120]);
+  assert.deepEqual(f.effects.filter(effect => f.mattressCards.includes(effect.element)).map(effect => effect.options.delay), [0, 70, 140]);
   const count = f.effects.length;
   f.enter(f.heading, f.image, ...f.mattressCards);
   assert.equal(f.effects.length, count, 'returning to a section must not restart its reveal');
@@ -203,7 +249,7 @@ test('all nine original bed cards are marked before the visible batch animates a
   f.enter(f.track);
   assert.equal(f.firstBedMarked(), true);
   assert.deepEqual(f.effects.map(effect => effect.element), f.cards.slice(0, 3));
-  assert.deepEqual(f.effects.map(effect => effect.options.delay), [0, 60, 120]);
+  assert.deepEqual(f.effects.map(effect => effect.options.delay), [0, 70, 140]);
   assert.ok(f.cards.every(card => card.dataset.revealState !== 'pending' && card.dataset.revealState));
   for (let index = 0; index < 27; index++) { f.recycle(); f.enter(f.track, ...f.cards); }
   assert.equal(f.effects.length, 3);
@@ -239,6 +285,47 @@ test('fast vertical scrolling cancels current effects and skips reveals while th
   f.advance(300);
   f.enter(f.action);
   assert.equal(f.effects.length, 2, 'later unvisited content may reveal after fast scrolling stops');
+});
+
+test('ordinary 120px wheel ticks do not cancel a reveal based on one 16ms frame', () => {
+  const f = fixture();
+  f.enter(f.heading);
+  f.scroll(120, 16);
+  assert.equal(f.effects[0].animation.cancelled, false);
+  f.enter(f.description);
+  assert.equal(f.description.dataset.revealState, 'running');
+  f.scroll(240, 16);
+  assert.ok(f.effects.every(effect => !effect.animation.cancelled));
+  f.enter(f.action);
+  assert.equal(f.action.dataset.revealState, 'running');
+});
+
+test('rapid wheel ticks are classified by their accumulated travel within the short sample window', () => {
+  const f = fixture();
+  f.enter(f.heading);
+  for (const y of [120, 240, 360, 480]) {
+    f.scroll(y, 16);
+    assert.equal(f.effects[0].animation.cancelled, false);
+  }
+  f.scroll(620, 16);
+  assert.equal(f.effects[0].animation.cancelled, true);
+  f.enter(f.description);
+  assert.equal(f.description.dataset.revealState, 'done');
+  assert.equal(f.effects.length, 1);
+  f.advance(300);
+  f.enter(f.action);
+  assert.equal(f.action.dataset.revealState, 'running');
+});
+
+test('ordinary scrolling over separate sample windows does not accumulate into a false fast gesture', () => {
+  const f = fixture();
+  f.enter(f.heading);
+  for (const y of [250, 500, 750, 1000]) {
+    f.scroll(y, 130);
+    assert.equal(f.effects[0].animation.cancelled, false);
+  }
+  f.enter(f.description);
+  assert.equal(f.description.dataset.revealState, 'running');
 });
 
 test('section links and hash targets become usable immediately, including the whole bed catalogue', () => {

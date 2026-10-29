@@ -9,8 +9,11 @@ export function initReveals() {
   const active = new Map();
   let observer;
   let lastY = window.scrollY;
-  let lastTime = performance.now();
+  const startedAt = performance.now();
+  let sampleStart = startedAt;
+  let sampleDistance = 0;
   let skipUntil = 0;
+  const playIntro = startedAt < 900 && window.scrollY < 2 && !window.location.hash && !document.hidden;
 
   function add(selector, kind = 'text', delay = 0) {
     main.querySelectorAll(selector).forEach(element => {
@@ -48,15 +51,15 @@ export function initReveals() {
 
   function animate(element, kind, delay) {
     const image = kind === 'image';
-    const distance = kind === 'action' || kind === 'row' ? 12 : kind === 'card' ? 16 : 18;
+    const distance = kind === 'action' || kind === 'row' ? 14 : 20;
     const from = image ? {opacity: 0} : {opacity: 0, translate: `0 ${distance}px`};
     const to = image ? {opacity: 1} : {opacity: 1, translate: '0 0'};
     try {
       // Individual translate composes with the existing card hover transform.
       const animation = element.animate([from, to], {
-        duration: image ? 620 : kind === 'action' ? 500 : 560,
-        delay: Math.min(delay, 120),
-        easing: 'cubic-bezier(.22,1,.36,1)',
+        duration: kind === 'action' ? 520 : 650,
+        delay: Math.min(delay, 140),
+        easing: 'cubic-bezier(.22,.75,.24,1)',
         fill: 'backwards'
       });
       active.set(element, animation);
@@ -85,7 +88,7 @@ export function initReveals() {
         const rect = card.getBoundingClientRect();
         return rect.right > bounds.left + 1 && rect.left < bounds.right - 1;
       }).sort((a, b) => a.getBoundingClientRect().left - b.getBoundingClientRect().left)
-        .forEach((card, index) => animate(card, 'card', Math.min(index, 2) * 60));
+        .forEach((card, index) => animate(card, 'card', Math.min(index, 2) * 70));
     } else if (play) animate(element, kind, delay);
   }
 
@@ -101,12 +104,18 @@ export function initReveals() {
   function onScroll() {
     const now = performance.now();
     const distance = Math.abs(window.scrollY - lastY);
-    if (distance / Math.max(16, now - lastTime) > 1.6 || distance > window.innerHeight * .85) {
+    if (now - sampleStart > 120) {
+      sampleStart = now;
+      sampleDistance = 0;
+    }
+    sampleDistance += distance;
+    // A normal wheel notch can be fast within one frame. Cancel only when
+    // a substantial part of the viewport is passed in a short gesture.
+    if (sampleDistance > window.innerHeight * .75 || distance > window.innerHeight * .85) {
       skipUntil = now + 220;
       finishActive();
     }
     lastY = window.scrollY;
-    lastTime = now;
   }
 
   function onInteraction(event) {
@@ -178,16 +187,19 @@ export function initReveals() {
           const grouped = record.kind === 'card' || record.kind === 'row';
           const count = counts.get(record.kind) || 0;
           if (grouped) counts.set(record.kind, count + 1);
-          const delay = grouped ? Math.min(record.delay + count * 60, 120) : record.delay;
+          const delay = grouped ? Math.min(record.delay + count * 70, 140) : record.delay;
           enter(record, !motion.matches && !document.hidden && performance.now() >= skipUntil, delay);
         });
-    }, {rootMargin: '48px 0px 64px', threshold: .01});
+    }, {rootMargin: '0px 0px -32px', threshold: .06});
 
     records.forEach(record => {
       const bounds = record.element.getBoundingClientRect();
-      // Already painted or passed content stays readable on first load and
-      // direct section links. Only approaching content receives an entrance.
-      if (bounds.top < window.innerHeight) enter(record, false);
+      // A fresh top-of-page visit gets a short hero introduction. Restored
+      // positions, late initialization and section links stay readable.
+      if (bounds.top < window.innerHeight) {
+        const intro = playIntro && bounds.bottom > 0 && !!record.element.closest('.hero');
+        enter(record, intro);
+      }
       else {
         record.element.dataset.revealState = 'pending';
         observer.observe(record.element);
