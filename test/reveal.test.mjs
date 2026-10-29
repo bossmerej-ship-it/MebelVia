@@ -8,16 +8,17 @@ const source = readFileSync(new URL('../dist/reveal.js', import.meta.url), 'utf8
 
 // The fixture models the real section hierarchy, clipping in the horizontal
 // catalogue, observer delivery, and cancellable Web Animations without a GPU.
-function fixture({ reduced = false, scroll = 0, startTime = 1000, hash = '', hidden = false, noObserver = false, noAnimate = false, observerError = false, animateError = false } = {}) {
+function fixture({ reduced = false, scroll = 0, startTime = 1000, hash = '', hidden = false, navigationType = 'reload', readyState = 'loading', bootstrap = false, noObserver = false, noAnimate = false, observerError = false, animateError = false } = {}) {
   let now = startTime;
   const window = new EventTarget();
   Object.assign(window, { innerHeight: 800, innerWidth: 1200, scrollY: scroll, location: { hash } });
   const document = new EventTarget();
-  Object.assign(document, { readyState: 'loading', hidden });
+  Object.assign(document, { readyState, hidden });
   const motion = new EventTarget();
   motion.matches = reduced;
   const effects = [], observers = [];
   let firstBedAnimationSawAllMarked;
+  let firstDeliveryAnimationSawAllMarked;
   let horizontal = 0;
 
   class Element extends EventTarget {
@@ -51,6 +52,7 @@ function fixture({ reduced = false, scroll = 0, startTime = 1000, hash = '', hid
           : node.matches(item);
       }));
     }
+    querySelector(selector) { return this.querySelectorAll(selector)[0] || null; }
     getBoundingClientRect() {
       const left = this.parentElement?.id === 'bed-grid'
         ? this.parentElement.children.indexOf(this) * 400 - horizontal : this.left;
@@ -60,6 +62,9 @@ function fixture({ reduced = false, scroll = 0, startTime = 1000, hash = '', hid
     animate(frames, options) {
       if (this.parentElement?.id === 'bed-grid' && firstBedAnimationSawAllMarked === undefined) {
         firstBedAnimationSawAllMarked = this.parentElement.children.every(card => card.dataset.revealState === 'done');
+      }
+      if (this.parentElement?.classes.has('delivery-inner') && firstDeliveryAnimationSawAllMarked === undefined) {
+        firstDeliveryAnimationSawAllMarked = this.parentElement.children.every(child => child.dataset.revealState === 'done');
       }
       if (animateError) throw new Error('Animation API unavailable');
       let resolve, reject;
@@ -98,8 +103,11 @@ function fixture({ reduced = false, scroll = 0, startTime = 1000, hash = '', hid
   const mattressTitle = mattresses.append(new Element('h2', { id: 'mattresses-title', top: 2600 }));
   const mattressGrid = mattresses.append(new Element('div', { id: 'mattress-grid', top: 2700 }));
   const mattressCards = Array.from({ length: 3 }, (_, index) => mattressGrid.append(new Element('article', { classes: 'product-card', top: 2700, left: index * 400 })));
-  const deliveryTitle = main.append(new Element('h2', { id: 'delivery-title', top: 3300 }));
-  const image = main.append(new Element('img', { classes: 'delivery-porter', top: 3350 }));
+  const delivery = main.append(new Element('section', { classes: 'delivery-section', top: 3250 }));
+  const deliveryGroup = delivery.append(new Element('div', { classes: 'delivery-inner', top: 3270 }));
+  const deliveryCopy = deliveryGroup.append(new Element('div', { classes: 'delivery-copy', top: 3300 }));
+  const deliveryTitle = deliveryCopy.append(new Element('h2', { id: 'delivery-title', top: 3300 }));
+  const image = deliveryGroup.append(new Element('img', { classes: 'delivery-porter', top: 3350 }));
   const faq = main.append(new Element('div', { id: 'faq', classes: 'faq', top: 3600 }));
   faq.append(new Element('h2', { top: 3600 }));
   const rows = Array.from({ length: 3 }, (_, index) => faq.append(new Element('details', { top: 3700 + index * 100 })));
@@ -119,9 +127,9 @@ function fixture({ reduced = false, scroll = 0, startTime = 1000, hash = '', hid
     disconnect() { this.disconnected = true; this.observed.clear(); }
   }
   window.IntersectionObserver = noObserver ? undefined : IntersectionObserver;
-  const context = { document, window, Element, IntersectionObserver, matchMedia: () => motion, performance: { now: () => now } };
+  const context = { document, window, Element, IntersectionObserver, matchMedia: () => motion, performance: { now: () => now, getEntriesByType: type => type === 'navigation' ? [{ type: navigationType }] : [] } };
   vm.runInNewContext(source, context);
-  const dispose = context.initReveals();
+  const dispose = bootstrap ? () => {} : context.initReveals();
 
   function event(type, target, properties = {}, surface = document) {
     const value = new Event(type);
@@ -130,9 +138,10 @@ function fixture({ reduced = false, scroll = 0, startTime = 1000, hash = '', hid
     surface.dispatchEvent(value);
   }
   return {
-    main, heroTitle, heroImage, anchorLink, heading, description, action, actionIcon, beds, bedsTitle, track, cards, mattressTitle, mattressCards, deliveryTitle, image, rows, consultationAction, hanna, fallback,
+    main, heroTitle, heroImage, anchorLink, heading, description, action, actionIcon, beds, bedsTitle, track, cards, mattressTitle, mattressCards, deliveryGroup, deliveryCopy, deliveryTitle, image, rows, consultationAction, hanna, fallback,
     effects, observers, document, window, motion, dispose,
     firstBedMarked: () => firstBedAnimationSawAllMarked,
+    firstDeliveryMarked: () => firstDeliveryAnimationSawAllMarked,
     enter(...elements) { observers[0]?.callback(elements.map(target => ({ target, isIntersecting: true, boundingClientRect: target.getBoundingClientRect() }))); },
     advance(ms) { now += ms; },
     scroll(y, ms = 16) { now += ms; window.scrollY = y; window.dispatchEvent(new Event('scroll')); },
@@ -155,9 +164,9 @@ function assertNaturalStyles(...elements) {
 test('missing animation capabilities and observer initialization failure leave content visible', () => {
   for (const options of [{ noObserver: true }, { noAnimate: true }, { observerError: true }, { animateError: true }]) {
     const f = fixture(options);
-    f.enter(f.heading, f.track);
+    f.enter(f.heading, f.track, f.deliveryGroup);
     assert.equal(f.effects.length, 0);
-    assertNaturalStyles(f.heroTitle, f.heading, f.track, ...f.cards, f.hanna, f.fallback);
+    assertNaturalStyles(f.heroTitle, f.heading, f.track, ...f.cards, f.deliveryCopy, f.image, f.hanna, f.fallback);
     assert.doesNotThrow(f.dispose);
   }
 });
@@ -165,11 +174,11 @@ test('missing animation capabilities and observer initialization failure leave c
 test('already visible or passed content stays painted and Hanna scene nodes are never observed', () => {
   const f = fixture({ scroll: 2000 });
   assert.equal(f.effects.length, 0);
-  for (const element of [f.heroTitle, f.heroImage, f.heading, f.track, ...f.cards]) {
+  for (const element of [f.heroTitle, f.heading, f.track, ...f.cards]) {
     assert.equal(element.dataset.revealState, 'done');
     assert.equal(f.observers[0].observed.has(element), false);
   }
-  for (const element of [f.hanna, f.fallback]) {
+  for (const element of [f.heroImage, f.hanna, f.fallback]) {
     assert.equal(element.dataset.revealState, undefined);
     assert.equal(f.observers[0].observed.has(element), false);
   }
@@ -177,12 +186,17 @@ test('already visible or passed content stays painted and Hanna scene nodes are 
 });
 
 test('a fresh opening at the top visibly introduces the hero and input can finish it immediately', () => {
-  const f = fixture({ startTime: 100 });
-  assert.deepEqual(new Set(f.effects.map(effect => effect.element)), new Set([f.heroTitle, f.anchorLink, f.heroImage]));
+  const f = fixture({ startTime: 100, navigationType: 'navigate' });
+  assert.deepEqual(new Set(f.effects.map(effect => effect.element)), new Set([f.heroTitle, f.anchorLink]));
   assert.equal(f.heroTitle.dataset.revealState, 'running');
   assert.equal(f.anchorLink.dataset.revealState, 'running');
   const title = f.effects.find(effect => effect.element === f.heroTitle);
   const action = f.effects.find(effect => effect.element === f.anchorLink);
+  assert.equal(title.frames[0].translate, '0 16px');
+  assert.equal(title.options.duration, 600);
+  assert.equal(action.frames[0].translate, '0 12px');
+  assert.equal(action.options.duration, 500);
+  assert.equal(f.heroImage.dataset.revealState, undefined, 'the hero photograph stays naturally painted');
   f.interaction('focusin', f.heroTitle);
   assert.equal(title.animation.cancelled, true);
   f.interaction('pointerdown', f.anchorLink);
@@ -191,21 +205,60 @@ test('a fresh opening at the top visibly introduces the hero and input can finis
   f.dispose();
 });
 
-test('restored positions, section links, late initialization and hidden tabs never restart the hero', () => {
+test('restored positions, section links and hidden tabs never restart the hero', () => {
   for (const options of [
     { startTime: 100, scroll: 120 },
     { startTime: 100, hash: '#beds' },
-    { startTime: 900 },
-    { startTime: 2000 },
+    { startTime: 100, navigationType: 'reload' },
+    { startTime: 100, navigationType: 'back_forward' },
+    { startTime: 2000, navigationType: 'reload' },
     { startTime: 100, hidden: true }
   ]) {
-    const f = fixture(options);
+    const f = fixture({ navigationType: 'navigate', ...options });
     assert.equal(f.effects.length, 0);
     assert.equal(f.heroTitle.dataset.revealState, 'done');
-    assert.equal(f.heroImage.dataset.revealState, 'done');
+    assert.equal(f.heroImage.dataset.revealState, undefined);
     assertNaturalStyles(f.heroTitle, f.anchorLink, f.heroImage);
     f.dispose();
   }
+});
+
+test('a fresh navigation has the same gentle hero introduction regardless of asset loading time', () => {
+  for (const startTime of [100, 900, 2000]) {
+    const f = fixture({ navigationType: 'navigate', startTime });
+    assert.deepEqual(new Set(f.effects.map(effect => effect.element)), new Set([f.heroTitle, f.anchorLink]));
+    assert.equal(f.heroImage.dataset.revealState, undefined);
+    assertNaturalStyles(f.heroImage);
+    f.dispose();
+  }
+});
+
+test('reload and back navigation remain readable when the browser restores scroll after initialization', () => {
+  for (const navigationType of ['reload', 'back_forward']) {
+    const f = fixture({ startTime: 100, navigationType });
+    assert.equal(f.effects.length, 0);
+    f.scroll(2500);
+    f.enter(f.heroTitle, f.heroImage, f.anchorLink);
+    f.scroll(0, 300);
+    f.enter(f.heroTitle, f.heroImage, f.anchorLink);
+    assert.equal(f.effects.length, 0);
+    assert.equal(f.heroTitle.dataset.revealState, 'done');
+    assertNaturalStyles(f.heroTitle, f.anchorLink, f.heroImage);
+    f.dispose();
+  }
+});
+
+test('the optional module starts at interactive readiness and waits only while the document is loading', () => {
+  const interactive = fixture({ readyState: 'interactive', bootstrap: true });
+  assert.equal(interactive.observers.length, 1);
+  assert.equal(interactive.heading.dataset.revealState, 'pending');
+  interactive.document.dispatchEvent(new Event('DOMContentLoaded'));
+  assert.equal(interactive.observers.length, 1, 'DOMContentLoaded must not initialize the module twice');
+
+  const loading = fixture({ readyState: 'loading', bootstrap: true });
+  assert.equal(loading.observers.length, 0);
+  loading.document.dispatchEvent(new Event('DOMContentLoaded'));
+  assert.equal(loading.observers.length, 1);
 });
 
 test('scroll reveals wait until elements enter the viewport rather than finishing below it', () => {
@@ -216,13 +269,13 @@ test('scroll reveals wait until elements enter the viewport rather than finishin
   assert.equal(f.heading.dataset.revealState, 'pending');
   f.enter(f.heading);
   assert.equal(f.heading.dataset.revealState, 'running');
-  assert.equal(f.effects[0].options.duration, 650);
+  assert.equal(f.effects[0].options.duration, 600);
 });
 
-test('text, actions, images and card batches use bounded motion without replacing hover transforms', () => {
+test('text, actions and card batches use bounded motion without replacing hover transforms', () => {
   const f = fixture();
-  f.enter(f.heading, f.description, f.action, f.image, ...f.mattressCards, ...f.rows);
-  assert.equal(f.effects.length, 10);
+  f.enter(f.heading, f.description, f.action, ...f.mattressCards, ...f.rows);
+  assert.equal(f.effects.length, 9);
   for (const { frames, options } of f.effects) {
     assert.ok(options.duration >= 450 && options.duration <= 700);
     assert.ok(options.delay >= 0 && options.delay <= 140);
@@ -236,12 +289,60 @@ test('text, actions, images and card batches use bounded motion without replacin
       assert.ok(distance >= 12 && distance <= 24);
     }
   }
-  const image = f.effects.find(effect => effect.element === f.image);
-  assert.ok(image.frames.every(frame => !('translate' in frame)));
   assert.deepEqual(f.effects.filter(effect => f.mattressCards.includes(effect.element)).map(effect => effect.options.delay), [0, 70, 140]);
   const count = f.effects.length;
-  f.enter(f.heading, f.image, ...f.mattressCards);
+  f.enter(f.heading, ...f.mattressCards);
   assert.equal(f.effects.length, count, 'returning to a section must not restart its reveal');
+});
+
+test('delivery enters once as a synchronized horizontal pair with opposite directions', () => {
+  const f = fixture();
+  assert.equal(f.observers[0].observed.has(f.deliveryGroup), true);
+  for (const child of [f.deliveryCopy, f.deliveryTitle, f.image]) {
+    assert.equal(f.observers[0].observed.has(child), false);
+  }
+  f.enter(f.deliveryTitle, f.image);
+  assert.equal(f.effects.length, 0, 'nested children must not launch independent effects');
+  f.enter(f.deliveryGroup);
+  assert.equal(f.firstDeliveryMarked(), true, 'both children must be marked before either animation starts');
+  assert.equal(f.effects.length, 2);
+  const copy = f.effects.find(effect => effect.element === f.deliveryCopy);
+  const truck = f.effects.find(effect => effect.element === f.image);
+  assert.deepEqual(Array.from(copy.frames, frame => ({ ...frame })), [{ opacity: 0, translate: '-24px 0' }, { opacity: 1, translate: '0 0' }]);
+  assert.deepEqual(Array.from(truck.frames, frame => ({ ...frame })), [{ opacity: 0, translate: '24px 0' }, { opacity: 1, translate: '0 0' }]);
+  for (const effect of [copy, truck]) {
+    assert.equal(effect.options.duration, 600);
+    assert.equal(effect.options.delay, 0);
+    assert.equal(effect.options.easing, 'cubic-bezier(.22,1,.36,1)');
+    assert.ok(effect.frames.every(frame => !('transform' in frame) && !('scale' in frame) && !('rotate' in frame)));
+  }
+  assertNaturalStyles(f.deliveryGroup, f.deliveryCopy, f.image);
+  f.enter(f.deliveryGroup, f.deliveryTitle, f.image);
+  assert.equal(f.effects.length, 2, 'returning or nested observer entries must not repeat the pair');
+});
+
+test('delivery remains naturally visible after animation failure and under reduced motion', () => {
+  const failed = fixture({ animateError: true });
+  failed.enter(failed.deliveryGroup);
+  assert.equal(failed.firstDeliveryMarked(), true);
+  assert.equal(failed.effects.length, 0);
+  for (const element of [failed.deliveryGroup, failed.deliveryCopy, failed.image]) {
+    assert.equal(element.dataset.revealState, 'done');
+  }
+  failed.enter(failed.deliveryGroup, failed.image);
+  assert.equal(failed.effects.length, 0);
+  assertNaturalStyles(failed.deliveryGroup, failed.deliveryCopy, failed.image);
+
+  const initial = fixture({ reduced: true });
+  assert.equal(initial.effects.length, 0);
+  assert.equal(initial.deliveryCopy.dataset.revealState, 'done');
+  assert.equal(initial.image.dataset.revealState, 'done');
+  const active = fixture();
+  active.enter(active.deliveryGroup);
+  active.reduced(true);
+  assert.equal(active.effects.length, 2);
+  assert.ok(active.effects.every(effect => effect.animation.cancelled));
+  assertNaturalStyles(active.deliveryGroup, active.deliveryCopy, active.image);
 });
 
 test('all nine original bed cards are marked before the visible batch animates and recycling never restarts it', () => {
@@ -274,14 +375,18 @@ test('reduced motion starts immediately and turning it on cancels active effects
   assertNaturalStyles(f.heading, ...f.cards, ...f.mattressCards);
 });
 
-test('fast vertical scrolling cancels current effects and skips reveals while the visitor passes', () => {
+test('fast vertical scrolling lets current effects settle naturally and skips newly passed content', async () => {
   const f = fixture();
   f.enter(f.heading);
   f.scroll(1000, 20);
-  assert.equal(f.effects[0].animation.cancelled, true);
+  assert.equal(f.effects[0].animation.cancelled, false);
+  assert.equal(f.heading.dataset.revealState, 'running');
   f.enter(f.description);
   assert.equal(f.description.dataset.revealState, 'done');
   assert.equal(f.effects.length, 1);
+  f.effects[0].animation.finish();
+  await Promise.resolve();
+  assert.equal(f.heading.dataset.revealState, 'done');
   f.advance(300);
   f.enter(f.action);
   assert.equal(f.effects.length, 2, 'later unvisited content may reveal after fast scrolling stops');
@@ -308,7 +413,7 @@ test('rapid wheel ticks are classified by their accumulated travel within the sh
     assert.equal(f.effects[0].animation.cancelled, false);
   }
   f.scroll(620, 16);
-  assert.equal(f.effects[0].animation.cancelled, true);
+  assert.equal(f.effects[0].animation.cancelled, false);
   f.enter(f.description);
   assert.equal(f.description.dataset.revealState, 'done');
   assert.equal(f.effects.length, 1);
@@ -359,7 +464,7 @@ test('focus or pointer input finishes a containing reveal and prevents a pending
 
 test('hidden documents and disposal cancel active animations without retaining hidden inline styles', async () => {
   const f = fixture();
-  f.enter(f.heading, f.image);
+  f.enter(f.heading, f.deliveryGroup);
   f.visible(false);
   assert.ok(f.effects.every(effect => effect.animation.cancelled));
   f.visible(true);

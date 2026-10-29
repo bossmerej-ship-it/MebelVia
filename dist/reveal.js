@@ -13,7 +13,11 @@ export function initReveals() {
   let sampleStart = startedAt;
   let sampleDistance = 0;
   let skipUntil = 0;
-  const playIntro = startedAt < 900 && window.scrollY < 2 && !window.location.hash && !document.hidden;
+  // Native scroll restoration can happen after modules run. A reload or a
+  // history visit must never hide the hero while the browser restores it.
+  const navigation = performance.getEntriesByType?.('navigation')[0];
+  const restored = navigation?.type === 'reload' || navigation?.type === 'back_forward';
+  const playIntro = !restored && window.scrollY < 2 && !window.location.hash && !document.hidden;
 
   function add(selector, kind = 'text', delay = 0) {
     main.querySelectorAll(selector).forEach(element => {
@@ -22,15 +26,14 @@ export function initReveals() {
   }
   add('#hero-title');
   add('.hero-actions > a', 'action', 70);
-  add('.bed-photo', 'image');
   add('.collection-copy > .eyebrow, .collection-copy > h2');
   add('.collection-copy > p', 'text', 60);
   add('.collection-link', 'action', 110);
-  add('#beds-title, #mattresses-title, #delivery-title, .faq > h2, .consultation > h2');
+  add('#beds-title, #mattresses-title, .faq > h2, .consultation > h2');
   add('#mattresses .section-subtitle', 'text', 60);
   add('#bed-grid', 'bed-list');
   add('#mattress-grid > .product-card', 'card');
-  add('.delivery-porter', 'image', 60);
+  add('.delivery-inner', 'delivery-group');
   add('.faq > details', 'row', 50);
   add('.consultation > p', 'text', 60);
   add('.consultation > .button', 'action', 110);
@@ -51,15 +54,17 @@ export function initReveals() {
 
   function animate(element, kind, delay) {
     const image = kind === 'image';
-    const distance = kind === 'action' || kind === 'row' ? 14 : 20;
-    const from = image ? {opacity: 0} : {opacity: 0, translate: `0 ${distance}px`};
+    const horizontal = kind === 'delivery-copy' || kind === 'delivery-truck';
+    const distance = kind === 'action' || kind === 'row' ? 12 : 16;
+    const offset = horizontal ? `${kind === 'delivery-copy' ? -24 : 24}px 0` : `0 ${distance}px`;
+    const from = image ? {opacity: 0} : {opacity: 0, translate: offset};
     const to = image ? {opacity: 1} : {opacity: 1, translate: '0 0'};
     try {
       // Individual translate composes with the existing card hover transform.
       const animation = element.animate([from, to], {
-        duration: kind === 'action' ? 520 : 650,
+        duration: kind === 'action' ? 500 : 600,
         delay: Math.min(delay, 140),
-        easing: 'cubic-bezier(.22,.75,.24,1)',
+        easing: 'cubic-bezier(.22,1,.36,1)',
         fill: 'backwards'
       });
       active.set(element, animation);
@@ -77,7 +82,17 @@ export function initReveals() {
     const {element, kind} = record;
     if (seen.has(element)) return;
     mark(element);
-    if (kind === 'bed-list') {
+    if (kind === 'delivery-group') {
+      const copy = element.querySelector('.delivery-copy');
+      const truck = element.querySelector('.delivery-porter');
+      // One observer entry starts both sides together. Mark both first, so
+      // reduced motion, failed animation or revisiting never hides either.
+      [copy, truck].filter(Boolean).forEach(mark);
+      if (play) {
+        if (copy) animate(copy, 'delivery-copy', 0);
+        if (truck) animate(truck, 'delivery-truck', 0);
+      }
+    } else if (kind === 'bed-list') {
       const cards = Array.from(element.children);
       // Mark the entire original set first. Recycled or newly scrolled-in
       // cards remain visible and never start another entrance animation.
@@ -109,11 +124,10 @@ export function initReveals() {
       sampleDistance = 0;
     }
     sampleDistance += distance;
-    // A normal wheel notch can be fast within one frame. Cancel only when
-    // a substantial part of the viewport is passed in a short gesture.
+    // Skip upcoming entrances during a large gesture, but let effects already
+    // on screen finish naturally rather than snapping to their final frame.
     if (sampleDistance > window.innerHeight * .75 || distance > window.innerHeight * .85) {
       skipUntil = now + 220;
-      finishActive();
     }
     lastY = window.scrollY;
   }
@@ -137,7 +151,7 @@ export function initReveals() {
       anchor = document.getElementById(decodeURIComponent(window.location.hash.slice(1)));
     } catch { return; }
     if (anchor) records.forEach(record => {
-      if (anchor === record.element || anchor.contains(record.element)) enter(record, false);
+      if (anchor === record.element || anchor.contains(record.element) || record.element.contains(anchor)) enter(record, false);
     });
   }
 
@@ -194,8 +208,8 @@ export function initReveals() {
 
     records.forEach(record => {
       const bounds = record.element.getBoundingClientRect();
-      // A fresh top-of-page visit gets a short hero introduction. Restored
-      // positions, late initialization and section links stay readable.
+      // Only a fresh top-of-page visit gets the short text introduction.
+      // Existing content and section links stay immediately readable.
       if (bounds.top < window.innerHeight) {
         const intro = playIntro && bounds.bottom > 0 && !!record.element.closest('.hero');
         enter(record, intro);
@@ -222,6 +236,6 @@ export function initReveals() {
 // Independent of app.js: an optional effect must not block the catalogue.
 if (typeof document !== 'undefined') {
   const start = () => { try { initReveals(); } catch { /* Natural styles remain visible. */ } };
-  if (document.readyState !== 'complete') document.addEventListener('DOMContentLoaded', start, {once: true});
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start, {once: true});
   else start();
 }

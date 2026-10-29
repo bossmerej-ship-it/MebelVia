@@ -31,21 +31,22 @@ test('a static fallback or temporarily zero-height viewport cannot produce a bad
 
 // Exercise failure and preference changes without a GPU or network. The real
 // model-viewer is checked in the browser; this fixture covers our lifecycle.
-function fixture(reduced = false) {
+function fixture(reduced = false, options = {}) {
   class Element extends EventTarget {
     attrs = new Map();
     dataset = {};
     setAttribute(key, value) { this.attrs.set(key, String(value)); }
     getAttribute(key) { return this.attrs.get(key) ?? null; }
     removeAttribute(key) { this.attrs.delete(key); }
+    querySelectorAll() { return []; }
+    closest() { return null; }
     pause() { this.paused = true; }
     jumpCameraToGoal() {}
   }
   const section = new Element(), viewer = new Element(), photo = new Element();
   const sticky = { clientHeight: 1000 };
   section.dataset.liftState = 'photo';
-  section.top = 0;
-  section.getBoundingClientRect = () => ({ top: section.top, height: 2400 });
+  section.top = options.sectionTop ?? 0;
   section.querySelector = selector => ({ '#hanna-bed': viewer, '.collection-image': photo, '.collection-sticky': sticky })[selector];
   viewer.dataset.src = 'assets/models/hanna.glb';
   viewer.availableAnimations = ['Lift'];
@@ -54,6 +55,20 @@ function fixture(reduced = false) {
   document.querySelector = () => section;
   document.hidden = false;
   const window = new EventTarget();
+  window.innerWidth = 1440;
+  window.innerHeight = 1000;
+  window.scrollY = options.scrollY ?? 0;
+  window.location = { hash: '' };
+  window.scrolls = [];
+  window.scrollBy = ({ top }) => { window.scrolls.push(top); window.scrollY += top; };
+  const reservedHeight = () => section.dataset.liftLayout === 'reserved' ? 1400 : 0;
+  section.getBoundingClientRect = () => ({ top: section.top - window.scrollY, height: 1000 + reservedHeight() });
+  const catalogue = new Element();
+  catalogue.getBoundingClientRect = () => {
+    const top = (options.followingTop ?? 4000) + reservedHeight() - window.scrollY;
+    return { top, bottom: top + 700, left: 0, right: 1440, width: 1440, height: 700 };
+  };
+  section.nextElementSibling = catalogue;
   const motion = new EventTarget();
   motion.matches = reduced;
   const narrow = { matches: false };
@@ -69,6 +84,7 @@ function fixture(reduced = false) {
     document, window, IntersectionObserver,
     matchMedia: query => query.includes('max-width') ? narrow : motion,
     customElements: { get: () => Element },
+    getComputedStyle: element => ({ visibility: element.visibility ?? 'visible', display: 'block' }),
     requestAnimationFrame: callback => { frames.set(++frameId, callback); return frameId; },
     cancelAnimationFrame: id => frames.delete(id),
     setTimeout: callback => { timers.set(++timerId, callback); return timerId; },
@@ -78,7 +94,7 @@ function fixture(reduced = false) {
     for (const [id, callback] of frames) { frames.delete(id); callback(); }
   };
   return {
-    section, viewer, photo, window, document, motion, frames, timers, flush,
+    section, viewer, photo, catalogue, window, document, motion, frames, timers, flush,
     near: value => intersect([{ isIntersecting: value }]),
     loaded: () => viewer.dispatchEvent(new Event('load')),
     narrow: value => { narrow.matches = value; window.dispatchEvent(new Event('resize')); },
@@ -109,12 +125,15 @@ test('closer camera stays fixed through forward and reverse lift, with room on n
 
 test('asset loading is lazy and failure keeps the accessible photo in normal flow', () => {
   const f = fixture();
+  assert.equal(f.section.dataset.liftLayout, 'reserved', 'reserve scroll geometry before the model is requested');
+  assert.equal(f.section.dataset.liftState, 'photo');
   assert.equal(f.viewer.getAttribute('src'), null);
   f.near(true);
   assert.equal(f.section.dataset.liftState, 'loading');
   assert.equal(f.viewer.getAttribute('src'), 'assets/models/hanna.glb');
   f.viewer.dispatchEvent(new Event('error'));
   assert.equal(f.section.dataset.liftState, 'unavailable');
+  assert.equal(f.section.dataset.liftLayout, undefined);
   assert.equal(f.viewer.getAttribute('aria-hidden'), 'true');
   assert.equal(f.photo.getAttribute('aria-hidden'), null);
   f.loaded();
@@ -127,6 +146,7 @@ test('a missing response times out without activating a tall scroll section', ()
   f.near(true);
   for (const callback of f.timers.values()) callback();
   assert.equal(f.section.dataset.liftState, 'unavailable');
+  assert.equal(f.section.dataset.liftLayout, undefined);
   assert.equal(f.frames.size, 0);
 });
 
@@ -156,13 +176,16 @@ test('reduced motion avoids download and can be changed during the session', () 
   const f = fixture(true);
   f.near(true);
   assert.equal(f.section.dataset.liftState, 'reduced');
+  assert.equal(f.section.dataset.liftLayout, undefined);
   assert.equal(f.viewer.getAttribute('src'), null);
   f.preference(false);
+  assert.equal(f.section.dataset.liftLayout, 'reserved');
   f.loaded();
   f.flush();
   assert.equal(f.section.dataset.liftState, 'ready');
   f.preference(true);
   assert.equal(f.section.dataset.liftState, 'reduced');
+  assert.equal(f.section.dataset.liftLayout, undefined);
   assert.equal(f.photo.getAttribute('aria-hidden'), null);
   f.window.dispatchEvent(new Event('scroll'));
   assert.equal(f.frames.size, 0);
@@ -171,20 +194,75 @@ test('reduced motion avoids download and can be changed during the session', () 
   assert.equal(f.section.dataset.liftState, 'ready');
 });
 
-test('a late response preserves a visible catalogue anchor through height changes', () => {
-  const f = fixture();
-  let scroll = 0;
-  const anchor = {getBoundingClientRect: () => ({top:116 + (f.section.dataset.liftState === 'ready' ? 1400 : 0) - scroll})};
-  f.window.location = {hash:'#beds'};
-  f.window.innerHeight = 1000;
-  f.window.scrollBy = ({top}) => { scroll += top; };
-  f.document.getElementById = () => anchor;
-  f.section.contains = () => false;
+test('a reload restored before initialization keeps visible catalogue content without a fragment', () => {
+  const f = fixture(false, { scrollY: 4200, followingTop: 4300 });
+  assert.equal(f.window.location.hash, '');
+  assert.equal(f.catalogue.getBoundingClientRect().top, 100);
+  assert.deepEqual(f.window.scrolls, [1400]);
+  assert.equal(f.viewer.getAttribute('src'), null, 'reserving geometry must not eagerly download the model');
+  f.near(true); f.loaded();
+  assert.equal(f.catalogue.getBoundingClientRect().top, 100);
+  assert.deepEqual(f.window.scrolls, [1400], 'a late successful load must not change geometry again');
+});
+
+test('a reload restored after initialization remains stable when the lazy model finishes', () => {
+  const f = fixture(false, { followingTop: 4300 });
+  f.window.scrollY = 5600;
+  assert.equal(f.catalogue.getBoundingClientRect().top, 100);
+  f.near(true); f.loaded();
+  assert.equal(f.catalogue.getBoundingClientRect().top, 100);
+  assert.deepEqual(f.window.scrolls, []);
+  assert.ok(f.viewer.currentTime > .9999, 'the fully open restored pose is ready before the next animation frame');
+});
+
+test('a load failure shrinks the reserved section without moving the visible catalogue', () => {
+  const f = fixture(false, { followingTop: 4300 });
+  f.window.scrollY = 5600;
   f.near(true);
-  f.loaded();
-  assert.equal(anchor.getBoundingClientRect().top,116);
-  assert.equal(scroll,1400);
+  f.viewer.dispatchEvent(new Event('error'));
+  assert.equal(f.catalogue.getBoundingClientRect().top, 100);
+  assert.deepEqual(f.window.scrolls, [-1400]);
+  assert.equal(f.section.dataset.liftLayout, undefined);
+  f.preference(true); f.preference(false);
+  assert.equal(f.section.dataset.liftLayout, undefined, 'a failed scene must keep its normal-flow fallback');
+});
+
+test('preference changes preserve visible content when removing and restoring the reserved layout', () => {
+  const f = fixture(false, { followingTop: 4300 });
+  f.near(true); f.loaded(); f.flush();
+  f.window.scrollY = 5600;
   f.preference(true);
-  assert.equal(anchor.getBoundingClientRect().top,116);
-  assert.equal(scroll,0);
+  assert.equal(f.catalogue.getBoundingClientRect().top, 100);
+  assert.equal(f.section.dataset.liftLayout, undefined);
+  f.preference(false);
+  assert.equal(f.catalogue.getBoundingClientRect().top, 100);
+  assert.equal(f.section.dataset.liftLayout, 'reserved');
+  assert.deepEqual(f.window.scrolls, [-1400, 1400]);
+  assert.ok(f.viewer.currentTime > .9999);
+});
+
+test('layout preservation ignores hidden and horizontally clipped carousel cards', () => {
+  const f = fixture(false, { followingTop: 4300 });
+  f.near(true); f.loaded(); f.flush();
+  f.window.scrollY = 5600;
+  const fixedCard = (left, visibility = 'visible', clipLeft = 0) => ({
+    visibility,
+    getBoundingClientRect: () => ({ top: 50, bottom: 250, left, right: left + 200, width: 200, height: 200 }),
+    closest: () => ({ getBoundingClientRect: () => ({ left: clipLeft, right: 1440 }) })
+  });
+  const visibleCard = {
+    getBoundingClientRect: () => ({ ...f.catalogue.getBoundingClientRect(), left: 100, right: 500, width: 400 }),
+    closest: () => ({ getBoundingClientRect: () => ({ left: 0, right: 1440 }) })
+  };
+  f.catalogue.querySelectorAll = () => [fixedCard(1600), fixedCard(100, 'hidden'), fixedCard(100, 'visible', 500), visibleCard];
+  f.preference(true);
+  assert.equal(visibleCard.getBoundingClientRect().top, 100);
+  assert.deepEqual(f.window.scrolls, [-1400]);
+});
+
+test('activation samples a halfway restored lift before revealing the model', () => {
+  const f = fixture(false, { sectionTop: -700 });
+  f.near(true); f.loaded();
+  assert.equal(f.section.dataset.liftState, 'ready');
+  assert.ok(Math.abs(f.viewer.currentTime - .5) < .00001);
 });

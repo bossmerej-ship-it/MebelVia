@@ -80,7 +80,7 @@
   }
 }
 @layer components {
-  .delivery-section{margin-top:56px;background:var(--paper)}
+  .delivery-section{margin-top:56px;background:var(--paper);overflow-x:clip}
   .delivery-inner{display:flex;align-items:center;justify-content:space-between;gap:56px;min-height:230px}
   .delivery-copy{padding:36px 0;max-width:670px}
   .delivery-copy h2{font-size:32px;font-weight:600;line-height:1.2;letter-spacing:-.025em}
