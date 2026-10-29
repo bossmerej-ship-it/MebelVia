@@ -1,7 +1,7 @@
 import { products, whatsappUrl } from './catalog.js';
 import { productPhotos, initProductPhotos } from './product-photos.js';
 import { initConsultationHint } from './consultation-hint.js';
-import { initBedCarousel } from './bed-carousel.js?v=f8d4859695fe';
+import { initBedCarousel } from './bed-carousel.js?v=002b4d7d7fd2';
 
 const icon = id => `<svg class="icon" aria-hidden="true"><use href="#i-${id}"/></svg>`;
 const escapeHTML = value => String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
