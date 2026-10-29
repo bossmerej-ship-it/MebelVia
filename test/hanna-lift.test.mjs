@@ -62,7 +62,17 @@ function fixture(reduced = false, options = {}) {
   window.scrolls = [];
   window.scrollBy = ({ top }) => { window.scrolls.push(top); window.scrollY += top; };
   const reservedHeight = () => section.dataset.liftLayout === 'reserved' ? 1400 : 0;
-  section.getBoundingClientRect = () => ({ top: section.top - window.scrollY, height: 1000 + reservedHeight() });
+  let boundsReads = 0;
+  section.getBoundingClientRect = () => {
+    boundsReads++;
+    return { top: section.top - window.scrollY, height: 1000 + reservedHeight() };
+  };
+  const poses = [];
+  let displayedTime = 0;
+  Object.defineProperty(viewer, 'currentTime', {
+    get: () => displayedTime,
+    set: value => { displayedTime = value; poses.push(value); }
+  });
   const catalogue = new Element();
   catalogue.getBoundingClientRect = () => {
     const top = (options.followingTop ?? 4000) + reservedHeight() - window.scrollY;
@@ -73,7 +83,7 @@ function fixture(reduced = false, options = {}) {
   motion.matches = reduced;
   const narrow = { matches: false };
   const frames = new Map(), timers = new Map();
-  let frameId = 0, timerId = 0, intersect;
+  let frameId = 0, timerId = 0, intersect, now = 0;
   class IntersectionObserver {
     constructor(callback) { intersect = callback; }
     observe() {}
@@ -85,16 +95,23 @@ function fixture(reduced = false, options = {}) {
     matchMedia: query => query.includes('max-width') ? narrow : motion,
     customElements: { get: () => Element },
     getComputedStyle: element => ({ visibility: element.visibility ?? 'visible', display: 'block' }),
+    performance: { now: () => now },
     requestAnimationFrame: callback => { frames.set(++frameId, callback); return frameId; },
     cancelAnimationFrame: id => frames.delete(id),
     setTimeout: callback => { timers.set(++timerId, callback); return timerId; },
     clearTimeout: id => timers.delete(id)
   });
-  const flush = () => {
-    for (const [id, callback] of frames) { frames.delete(id); callback(); }
+  const flush = (elapsed = 1000 / 60) => {
+    now += elapsed;
+    for (const [id, callback] of Array.from(frames)) { frames.delete(id); callback(now); }
+  };
+  const settle = () => {
+    for (let i = 0; frames.size && i < 120; i++) flush();
+    assert.equal(frames.size, 0, 'the damper must settle without an idle frame loop');
   };
   return {
-    section, viewer, photo, catalogue, window, document, motion, frames, timers, flush,
+    section, viewer, photo, catalogue, window, document, motion, frames, timers, flush, settle, poses,
+    reads: () => boundsReads,
     near: value => intersect([{ isIntersecting: value }]),
     loaded: () => viewer.dispatchEvent(new Event('load')),
     narrow: value => { narrow.matches = value; window.dispatchEvent(new Event('resize')); },
@@ -109,11 +126,11 @@ test('closer camera stays fixed through forward and reverse lift, with room on n
   assert.equal(camera, '0deg 85deg 5.2m');
   for (const top of [-700, -1400, -700, 0]) {
     f.section.top = top;
-    f.window.dispatchEvent(new Event('scroll')); f.flush();
+    f.window.dispatchEvent(new Event('scroll')); f.settle();
     assert.equal(f.viewer.getAttribute('camera-orbit'), camera);
   }
   f.section.top = -700;
-  f.window.dispatchEvent(new Event('scroll')); f.flush();
+  f.window.dispatchEvent(new Event('scroll')); f.settle();
   const time = f.viewer.currentTime;
   f.narrow(true); f.flush();
   assert.equal(f.viewer.getAttribute('camera-orbit'), '0deg 85deg 5.65m');
@@ -150,7 +167,7 @@ test('a missing response times out without activating a tall scroll section', ()
   assert.equal(f.frames.size, 0);
 });
 
-test('scroll renders only on demand, holds its pose, and reverses from the open end', () => {
+test('one wheel step produces intermediate poses, settles exactly, and reverses from the open end', () => {
   const f = fixture();
   f.near(true);
   f.loaded();
@@ -161,11 +178,16 @@ test('scroll renders only on demand, holds its pose, and reverses from the open 
   f.section.top = -1400;
   f.window.dispatchEvent(new Event('scroll'));
   f.flush();
+  assert.ok(f.viewer.currentTime > 0 && f.viewer.currentTime < .9999, 'a wheel notch must not seek directly to its final pose');
+  assert.equal(f.frames.size, 1, 'fill the gap between discrete scroll inputs');
+  f.settle();
   assert.ok(f.viewer.currentTime > 0.9999 && f.viewer.currentTime < 1);
   assert.equal(f.frames.size, 0, 'there must be no animation loop after scroll stops');
   f.section.top = -700;
   f.window.dispatchEvent(new Event('scroll'));
   f.flush();
+  assert.ok(f.viewer.currentTime > .5 && f.viewer.currentTime < .9999);
+  f.settle();
   assert.ok(Math.abs(f.viewer.currentTime - 0.5) < 0.00001);
   f.near(false);
   f.window.dispatchEvent(new Event('scroll'));
@@ -265,4 +287,118 @@ test('activation samples a halfway restored lift before revealing the model', ()
   f.near(true); f.loaded();
   assert.equal(f.section.dataset.liftState, 'ready');
   assert.ok(Math.abs(f.viewer.currentTime - .5) < .00001);
+});
+
+test('scroll events coalesce layout reads and settling frames reuse the latest target', () => {
+  const f = fixture();
+  f.near(true); f.loaded();
+  const before = f.reads();
+  for (const top of [-350, -550, -700]) {
+    f.section.top = top;
+    f.window.dispatchEvent(new Event('scroll'));
+  }
+  assert.equal(f.frames.size, 1, 'several inputs before a paint share one frame');
+  assert.equal(f.reads(), before, 'scroll listeners do not force layout');
+  f.flush();
+  assert.equal(f.reads(), before + 1);
+  const first = f.viewer.currentTime;
+  assert.ok(first > 0 && first < .5);
+  f.settle();
+  assert.equal(f.reads(), before + 1, 'settling must not keep measuring the page');
+  assert.ok(Math.abs(f.viewer.currentTime - .499995) < .000001, 'the latest input, not the first one, wins');
+  const writes = f.poses.length;
+  f.flush(1000);
+  assert.equal(f.poses.length, writes, 'no idle GPU updates after settling');
+});
+
+test('damping uses elapsed time consistently across display refresh rates', () => {
+  const atRate = step => {
+    const f = fixture();
+    f.near(true); f.loaded();
+    f.section.top = -1400;
+    f.window.dispatchEvent(new Event('scroll'));
+    for (let elapsed = 0; elapsed < 160; elapsed += step) f.flush(step);
+    return f.viewer.currentTime;
+  };
+  assert.ok(Math.abs(atRate(16) - atRate(8)) < .000001, '60Hz and 120Hz must not change the response speed');
+});
+
+test('a quick reversal starts from the displayed pose and never overshoots either target', () => {
+  const f = fixture();
+  f.near(true); f.loaded();
+  f.section.top = -1400;
+  f.window.dispatchEvent(new Event('scroll'));
+  f.flush(); f.flush();
+  const turningPoint = f.viewer.currentTime;
+  assert.ok(turningPoint > 0 && turningPoint < .99999);
+  const start = f.poses.length;
+  f.section.top = 0;
+  f.window.dispatchEvent(new Event('scroll'));
+  assert.equal(f.viewer.currentTime, turningPoint, 'input must not snap the current frame');
+  f.flush();
+  assert.ok(f.viewer.currentTime > 0 && f.viewer.currentTime < turningPoint);
+  f.settle();
+  const reversed = [turningPoint, ...f.poses.slice(start)];
+  assert.ok(reversed.every((value, index) => value >= 0 && (!index || value <= reversed[index - 1])));
+  assert.equal(f.viewer.currentTime, 0);
+});
+
+test('hidden and offscreen scenes cancel settling and resume at the current scroll pose', () => {
+  for (const hidden of [true, false]) {
+    const f = fixture();
+    f.near(true); f.loaded();
+    f.section.top = -1400;
+    f.window.dispatchEvent(new Event('scroll')); f.flush();
+    assert.equal(f.frames.size, 1);
+    if (hidden) {
+      f.document.hidden = true;
+      f.document.dispatchEvent(new Event('visibilitychange'));
+    } else f.near(false);
+    assert.equal(f.frames.size, 0);
+    f.section.top = -700;
+    f.window.dispatchEvent(new Event('scroll'));
+    assert.equal(f.frames.size, 0, 'an invisible scene cannot request more GPU work');
+    if (hidden) {
+      f.document.hidden = false;
+      f.document.dispatchEvent(new Event('visibilitychange'));
+    } else f.near(true);
+    assert.ok(Math.abs(f.viewer.currentTime - .499995) < .000001, 'reentry samples the current position directly');
+    assert.equal(f.frames.size, 0, 'reentry must not replay missed movement');
+  }
+});
+
+test('resize, page restoration and reduced motion replace a pending wheel tail without replay', () => {
+  const f = fixture();
+  f.near(true); f.loaded();
+  f.section.top = -1400;
+  f.window.dispatchEvent(new Event('scroll')); f.flush();
+  assert.equal(f.frames.size, 1);
+  f.section.top = -700;
+  f.narrow(true);
+  assert.ok(Math.abs(f.viewer.currentTime - .499995) < .000001);
+  assert.equal(f.frames.size, 0);
+  f.section.top = -1400;
+  f.window.dispatchEvent(new Event('scroll')); f.flush();
+  f.section.top = 0;
+  f.window.dispatchEvent(new Event('pageshow'));
+  assert.equal(f.viewer.currentTime, 0);
+  assert.equal(f.frames.size, 0);
+  f.section.top = -700;
+  f.window.dispatchEvent(new Event('scroll')); f.flush();
+  f.preference(true);
+  assert.equal(f.frames.size, 0);
+  f.preference(false);
+  assert.ok(Math.abs(f.viewer.currentTime - .499995) < .000001);
+  assert.equal(f.frames.size, 0);
+});
+
+test('a delayed frame is bounded instead of jumping to the final pose', () => {
+  const f = fixture();
+  f.near(true); f.loaded();
+  f.section.top = -1400;
+  f.window.dispatchEvent(new Event('scroll'));
+  f.flush(5000);
+  assert.ok(f.viewer.currentTime > 0 && f.viewer.currentTime < .5);
+  f.settle();
+  assert.equal(f.viewer.currentTime, .99999);
 });

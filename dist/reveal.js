@@ -13,11 +13,6 @@ export function initReveals() {
   let sampleStart = startedAt;
   let sampleDistance = 0;
   let skipUntil = 0;
-  // Native scroll restoration can happen after modules run. A reload or a
-  // history visit must never hide the hero while the browser restores it.
-  const navigation = performance.getEntriesByType?.('navigation')[0];
-  const restored = navigation?.type === 'reload' || navigation?.type === 'back_forward';
-  const playIntro = !restored && window.scrollY < 2 && !window.location.hash && !document.hidden;
 
   function add(selector, kind = 'text', delay = 0) {
     main.querySelectorAll(selector).forEach(element => {
@@ -135,6 +130,9 @@ export function initReveals() {
   function onInteraction(event) {
     const target = event.target;
     if (!target) return;
+    // A finger touching text or a card's blank area may begin a page swipe.
+    // Only an actual control needs its effect settled before pointer input.
+    if (event.type === 'pointerdown' && !target.closest?.('a, button, input, select, textarea, summary')) return;
     records.forEach(record => {
       if (record.element === target || record.element.contains(target)) enter(record, false);
     });
@@ -202,17 +200,19 @@ export function initReveals() {
           const count = counts.get(record.kind) || 0;
           if (grouped) counts.set(record.kind, count + 1);
           const delay = grouped ? Math.min(record.delay + count * 70, 140) : record.delay;
-          enter(record, !motion.matches && !document.hidden && performance.now() >= skipUntil, delay);
+          // Start while still below the screen. If observer delivery is late,
+          // never turn already-painted content transparent to restart it.
+          const belowScreen = record.element.getBoundingClientRect().top >= window.innerHeight;
+          enter(record, belowScreen && !motion.matches && !document.hidden && performance.now() >= skipUntil, delay);
         });
-    }, {rootMargin: '0px 0px -32px', threshold: .06});
+    }, {rootMargin: '0px 0px 120px', threshold: 0});
 
     records.forEach(record => {
       const bounds = record.element.getBoundingClientRect();
-      // Only a fresh top-of-page visit gets the short text introduction.
-      // Existing content and section links stay immediately readable.
+      // The hero and any restored content are already painted. Leave them
+      // untouched; optional entrances belong only to incoming sections.
       if (bounds.top < window.innerHeight) {
-        const intro = playIntro && bounds.bottom > 0 && !!record.element.closest('.hero');
-        enter(record, intro);
+        enter(record, false);
       }
       else {
         record.element.dataset.revealState = 'pending';

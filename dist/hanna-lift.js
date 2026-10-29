@@ -21,6 +21,9 @@ export function initHannaLift() {
   let frame = 0;
   let deadline;
   let lastProgress = -1;
+  let targetProgress = 0;
+  let targetDirty = true;
+  let previousTime = null;
   let duration = 0;
 
   // Keep both ends of the lift inside the closer product framing. A narrow
@@ -75,6 +78,8 @@ export function initHannaLift() {
   function cancelFrame() {
     cancelAnimationFrame(frame);
     frame = 0;
+    previousTime = null;
+    targetDirty = true;
   }
 
   function showPhoto(state) {
@@ -88,7 +93,7 @@ export function initHannaLift() {
     photo.removeAttribute('aria-hidden');
     viewer.pause?.();
     window.removeEventListener('scroll', schedule);
-    window.removeEventListener('resize', schedule);
+    window.removeEventListener('resize', onResize);
     lastProgress = -1;
   }
 
@@ -98,27 +103,76 @@ export function initHannaLift() {
     showPhoto('unavailable');
   }
 
-  function updatePose() {
+  function readTarget() {
     const bounds = section.getBoundingClientRect();
-    const progress = liftProgress(bounds.top, bounds.height, sticky.clientHeight);
+    targetProgress = liftProgress(bounds.top, bounds.height, sticky.clientHeight);
+    targetDirty = false;
+  }
+
+  function writePose(progress) {
     if (progress === lastProgress) return;
     // LoopRepeat wraps at exactly duration. Stay on its final pose so reverse
     // scrolling keeps working after the fully-open hold, without restarting it.
     viewer.currentTime = progress * Math.max(0, duration - 0.00001);
-    section.dataset.liftProgress = progress.toFixed(5);
+    const reported = progress.toFixed(5);
+    if (section.dataset.liftProgress !== reported) section.dataset.liftProgress = reported;
     lastProgress = progress;
   }
 
-  function render() {
+  function updatePose() {
+    cancelFrame();
+    readTarget();
+    writePose(targetProgress);
+  }
+
+  function canRender() {
+    return near && !document.hidden && section.dataset.liftState === 'ready';
+  }
+
+  function queueFrame() {
+    if (!frame && canRender()) {
+      if (previousTime === null) previousTime = performance.now();
+      frame = requestAnimationFrame(render);
+    }
+  }
+
+  function render(time) {
     frame = 0;
-    if (section.dataset.liftState !== 'ready' || document.hidden) return;
-    updatePose();
+    if (!canRender()) return;
+    // Read layout only once for the newest scroll event. The short settling
+    // tail reuses that target rather than measuring the page on every frame.
+    if (targetDirty) readTarget();
+    const difference = targetProgress - lastProgress;
+    if (Math.abs(difference) <= .0005) {
+      writePose(targetProgress);
+      previousTime = null;
+      return;
+    }
+    const elapsed = previousTime === null ? 1000 / 60 : Math.max(0, Math.min(32, time - previousTime));
+    previousTime = time;
+    // A small time-based damper fills the gaps between wheel notches. It
+    // follows reversals from the displayed pose without overshooting.
+    const progress = lastProgress + difference * (1 - Math.exp(-elapsed / 68));
+    const settled = Math.abs(targetProgress - progress) <= .0005;
+    writePose(settled ? targetProgress : progress);
+    if (settled) previousTime = null;
+    else queueFrame();
   }
 
   function schedule() {
-    if (!frame && near && !document.hidden && section.dataset.liftState === 'ready') {
-      frame = requestAnimationFrame(render);
-    }
+    targetDirty = true;
+    queueFrame();
+  }
+
+  function resume() {
+    if (canRender()) updatePose();
+  }
+
+  function onResize() {
+    // Resizing and native restoration change geometry, not user intent. Do
+    // not animate through an old viewport's pose when returning to the scene.
+    if (canRender()) updatePose();
+    else targetDirty = true;
   }
 
   function activate() {
@@ -133,8 +187,7 @@ export function initHannaLift() {
     viewer.removeAttribute('aria-hidden');
     viewer.jumpCameraToGoal();
     window.addEventListener('scroll', schedule, { passive: true });
-    window.addEventListener('resize', schedule, { passive: true });
-    schedule();
+    window.addEventListener('resize', onResize, { passive: true });
   }
 
   function modelReady() {
@@ -178,18 +231,19 @@ export function initHannaLift() {
   });
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) cancelFrame();
-    else schedule();
+    else resume();
   });
-  window.addEventListener('pageshow', schedule);
+  window.addEventListener('pageshow', resume);
 
   if (motion.matches) showPhoto('reduced');
   else reserveLayout();
   if ('IntersectionObserver' in window) {
     const observer = new IntersectionObserver(entries => {
+      const wasNear = near;
       near = entries[0].isIntersecting;
       if (near) {
         requestModel();
-        schedule();
+        if (!wasNear) resume();
       } else cancelFrame();
     }, { rootMargin: '125% 0px' });
     observer.observe(section);

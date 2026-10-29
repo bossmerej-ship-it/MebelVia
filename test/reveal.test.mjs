@@ -30,6 +30,7 @@ function fixture({ reduced = false, scroll = 0, startTime = 1000, hash = '', hid
     append(child) { this.children.push(child); child.parentElement = this; return child; }
     contains(target) { return target === this || this.children.some(child => child.contains(target)); }
     matches(selector) {
+      if (selector.includes(',')) return selector.split(',').some(part => this.matches(part.trim()));
       if (selector === 'a[href^="#"]') return this.tag === 'a' && this.href?.startsWith('#');
       if (selector.startsWith('#')) return this.id === selector.slice(1);
       if (selector.startsWith('.')) return this.classes.has(selector.slice(1));
@@ -185,22 +186,15 @@ test('already visible or passed content stays painted and Hanna scene nodes are 
   assertNaturalStyles(f.heroTitle, f.heading, f.hanna, f.fallback);
 });
 
-test('a fresh opening at the top visibly introduces the hero and input can finish it immediately', () => {
+test('a fresh opening leaves the already painted hero and its controls visible', () => {
   const f = fixture({ startTime: 100, navigationType: 'navigate' });
-  assert.deepEqual(new Set(f.effects.map(effect => effect.element)), new Set([f.heroTitle, f.anchorLink]));
-  assert.equal(f.heroTitle.dataset.revealState, 'running');
-  assert.equal(f.anchorLink.dataset.revealState, 'running');
-  const title = f.effects.find(effect => effect.element === f.heroTitle);
-  const action = f.effects.find(effect => effect.element === f.anchorLink);
-  assert.equal(title.frames[0].translate, '0 16px');
-  assert.equal(title.options.duration, 600);
-  assert.equal(action.frames[0].translate, '0 12px');
-  assert.equal(action.options.duration, 500);
+  assert.equal(f.effects.length, 0);
+  assert.equal(f.heroTitle.dataset.revealState, 'done');
+  assert.equal(f.anchorLink.dataset.revealState, 'done');
   assert.equal(f.heroImage.dataset.revealState, undefined, 'the hero photograph stays naturally painted');
   f.interaction('focusin', f.heroTitle);
-  assert.equal(title.animation.cancelled, true);
   f.interaction('pointerdown', f.anchorLink);
-  assert.equal(action.animation.cancelled, true);
+  assert.equal(f.effects.length, 0);
   assertNaturalStyles(f.heroTitle, f.anchorLink, f.heroImage);
   f.dispose();
 });
@@ -223,10 +217,11 @@ test('restored positions, section links and hidden tabs never restart the hero',
   }
 });
 
-test('a fresh navigation has the same gentle hero introduction regardless of asset loading time', () => {
+test('asset loading time never causes an already painted hero to disappear', () => {
   for (const startTime of [100, 900, 2000]) {
     const f = fixture({ navigationType: 'navigate', startTime });
-    assert.deepEqual(new Set(f.effects.map(effect => effect.element)), new Set([f.heroTitle, f.anchorLink]));
+    assert.equal(f.effects.length, 0);
+    assert.equal(f.heroTitle.dataset.revealState, 'done');
     assert.equal(f.heroImage.dataset.revealState, undefined);
     assertNaturalStyles(f.heroImage);
     f.dispose();
@@ -261,15 +256,38 @@ test('the optional module starts at interactive readiness and waits only while t
   assert.equal(loading.observers.length, 1);
 });
 
-test('scroll reveals wait until elements enter the viewport rather than finishing below it', () => {
+test('scroll reveals begin just before entry and never reset already visible content', () => {
   const f = fixture();
-  assert.equal(f.observers[0].options.rootMargin, '0px 0px -32px');
-  assert.equal(f.observers[0].options.threshold, .06);
+  assert.equal(f.observers[0].options.rootMargin, '0px 0px 120px');
+  assert.equal(f.observers[0].options.threshold, 0);
   assert.equal(f.observers[0].observed.has(f.heading), true);
   assert.equal(f.heading.dataset.revealState, 'pending');
+  f.heading.top = 820;
   f.enter(f.heading);
   assert.equal(f.heading.dataset.revealState, 'running');
   assert.equal(f.effects[0].options.duration, 600);
+  f.description.top = 799;
+  f.enter(f.description);
+  assert.equal(f.description.dataset.revealState, 'done');
+  assert.equal(f.effects.length, 1, 'late observer delivery cannot hide painted text');
+  assertNaturalStyles(f.description);
+});
+
+test('late delivery of large card and delivery groups leaves every child painted', () => {
+  for (const top of [799, 400, -100]) {
+    const f = fixture();
+    f.track.top = top;
+    f.deliveryGroup.top = top;
+    f.enter(f.track, f.deliveryGroup);
+    assert.equal(f.effects.length, 0);
+    assert.ok(f.cards.every(card => card.dataset.revealState === 'done'));
+    assert.equal(f.deliveryCopy.dataset.revealState, 'done');
+    assert.equal(f.image.dataset.revealState, 'done');
+    f.track.top = f.deliveryGroup.top = 900;
+    f.enter(f.track, f.deliveryGroup);
+    assert.equal(f.effects.length, 0, 'skipped entries remain one-shot');
+    assertNaturalStyles(...f.cards, f.deliveryCopy, f.image);
+  }
 });
 
 test('text, actions and card batches use bounded motion without replacing hover transforms', () => {
@@ -388,6 +406,7 @@ test('fast vertical scrolling lets current effects settle naturally and skips ne
   await Promise.resolve();
   assert.equal(f.heading.dataset.revealState, 'done');
   f.advance(300);
+  f.action.top = 2000;
   f.enter(f.action);
   assert.equal(f.effects.length, 2, 'later unvisited content may reveal after fast scrolling stops');
 });
@@ -418,12 +437,14 @@ test('rapid wheel ticks are classified by their accumulated travel within the sh
   assert.equal(f.description.dataset.revealState, 'done');
   assert.equal(f.effects.length, 1);
   f.advance(300);
+  f.action.top = 2000;
   f.enter(f.action);
   assert.equal(f.action.dataset.revealState, 'running');
 });
 
 test('ordinary scrolling over separate sample windows does not accumulate into a false fast gesture', () => {
   const f = fixture();
+  f.description.top = 2000;
   f.enter(f.heading);
   for (const y of [250, 500, 750, 1000]) {
     f.scroll(y, 130);
@@ -460,6 +481,18 @@ test('focus or pointer input finishes a containing reveal and prevents a pending
     assert.equal(f.effects.length, 1);
     assertNaturalStyles(f.action, f.consultationAction);
   }
+});
+
+test('starting a swipe on text or a card blank area never cancels a running entrance', () => {
+  const f = fixture();
+  f.enter(f.heading, f.track);
+  f.interaction('pointerdown', f.heading);
+  f.interaction('pointerdown', f.cards[0]);
+  assert.ok(f.effects.every(effect => !effect.animation.cancelled));
+  assert.equal(f.heading.dataset.revealState, 'running');
+  assert.equal(f.cards[0].dataset.revealState, 'running');
+  f.interaction('focusin', f.heading);
+  assert.equal(f.effects.find(effect => effect.element === f.heading).animation.cancelled, true, 'focus still makes a target immediately usable');
 });
 
 test('hidden documents and disposal cancel active animations without retaining hidden inline styles', async () => {

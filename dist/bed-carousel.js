@@ -23,7 +23,6 @@ export function initBedCarousel() {
   function jump(left) {
     track.classList.add('is-recentering');
     track.scrollTo({left, behavior: 'instant'});
-    track.getBoundingClientRect();
     cancelAnimationFrame(restoreSnap);
     restoreSnap = requestAnimationFrame(() => {
       if (!wheelScrolling && !nativeGesture) track.classList.remove('is-recentering');
