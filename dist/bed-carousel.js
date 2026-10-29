@@ -131,6 +131,8 @@ export function initBedCarousel() {
     nativeGesture = pointerActive = true;
     clearTimeout(scrollTimer);
     moving = false;
+    // A new manual gesture takes over immediately from an arrow animation.
+    track.scrollTo({left: track.scrollLeft, behavior: 'instant'});
     recenter(true);
     destination = track.scrollLeft;
     rememberPosition();
@@ -174,11 +176,8 @@ export function initBedCarousel() {
     rememberPosition();
     wheelTimer = setTimeout(() => {
       wheelScrolling = false;
-      destination = Math.round(track.scrollLeft / stride()) * stride();
-      moving = true;
-      const alreadyAligned = Math.abs(destination - track.scrollLeft) < 1;
-      track.scrollTo({left: destination, behavior: reducedMotion.matches ? 'instant' : 'smooth'});
-      if (alreadyAligned || reducedMotion.matches) syncPosition();
+      // Keep the exact fractional position where the gesture ended.
+      syncPosition();
     }, 160);
   }, {passive: false});
   new ResizeObserver(() => {
