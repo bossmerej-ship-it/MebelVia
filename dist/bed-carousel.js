@@ -8,6 +8,9 @@ export function initBedCarousel() {
   let scrollTimer;
   let restoreSnap;
   let moving = false;
+  let layoutWidth = track.clientWidth;
+  let anchor;
+  let anchorOffset = 0;
 
   const limit = () => Math.max(0, track.scrollWidth - track.clientWidth);
   const stride = () => track.firstElementChild ? track.firstElementChild.getBoundingClientRect().width + (parseFloat(getComputedStyle(track).columnGap) || 0) : 0;
@@ -18,10 +21,29 @@ export function initBedCarousel() {
 
   // Keep real cards on either side of the viewport. Moving existing nodes
   // preserves their photo handlers and the product dialog's return target.
-  function recenter() {
+  function jump(left) {
+    track.classList.add('is-recentering');
+    track.scrollTo({left, behavior: 'instant'});
+    track.getBoundingClientRect();
+    cancelAnimationFrame(restoreSnap);
+    restoreSnap = requestAnimationFrame(() => track.classList.remove('is-recentering'));
+  }
+
+  function rememberPosition() {
+    const step = stride();
+    if (!step || layoutWidth !== track.clientWidth) return;
+    const index = Math.floor((track.scrollLeft + 1) / step);
+    anchor = track.children[index];
+    anchorOffset = track.scrollLeft / step - index;
+  }
+
+  function recenter(recycleFocused = false) {
     const step = stride();
     if (!step || limit() <= 1) return;
-    const visible = Math.ceil((track.clientWidth + (parseFloat(getComputedStyle(track).columnGap) || 0)) / step);
+    const focus = document.activeElement;
+    // Tab navigation must be able to leave the finite set of real cards.
+    if (!recycleFocused && focus !== track && track.contains(focus)) return;
+    const visible = Math.ceil((track.clientWidth + (parseFloat(getComputedStyle(track).columnGap) || 0) - 1) / step);
     const buffer = Math.floor((track.children.length - visible) / 2);
     if (buffer < 1) return;
     const shift = buffer - Math.floor((track.scrollLeft + 1) / step);
@@ -33,26 +55,23 @@ export function initBedCarousel() {
     } else {
       for (let i = 0; i > shift; i--) track.append(track.firstElementChild);
     }
-    track.scrollTo({left: position, behavior: 'instant'});
+    jump(position);
+    if (focus !== document.activeElement && track.contains(focus)) focus.focus({preventScroll: true});
     destination = track.scrollLeft;
-    // Commit the compensated position before restoring native snap.
-    track.getBoundingClientRect();
-    cancelAnimationFrame(restoreSnap);
-    restoreSnap = requestAnimationFrame(() => track.classList.remove('is-recentering'));
   }
 
   function move(direction) {
     if (limit() <= 1) return;
     clearTimeout(scrollTimer);
     if (!moving) {
-      recenter();
+      recenter(true);
       destination = track.scrollLeft;
     }
     // Rapid clicks can exhaust the physical buffer before smooth scrolling
     // finishes. Settle the requested card, then replenish that buffer.
     if (destination + direction * stride() < 0 || destination + direction * stride() > limit()) {
       track.scrollTo({left: destination, behavior: 'instant'});
-      recenter();
+      recenter(true);
     }
     destination = direction < 0 && destination <= 1 ? limit()
       : direction > 0 && destination >= limit() - 1 ? 0
@@ -76,23 +95,42 @@ export function initBedCarousel() {
     moving = false;
     recenter();
     destination = track.scrollLeft;
+    rememberPosition();
     updateControls();
   }
 
   track.addEventListener('scroll', () => {
     updateControls();
+    rememberPosition();
     clearTimeout(scrollTimer);
     scrollTimer = setTimeout(syncPosition, 150);
   }, {passive: true});
   track.addEventListener('scrollend', syncPosition);
-  track.addEventListener('pointerdown', syncPosition, {passive: true});
+  function prepareNativeScroll() {
+    clearTimeout(scrollTimer);
+    moving = false;
+    recenter(true);
+    destination = track.scrollLeft;
+    rememberPosition();
+  }
+  track.addEventListener('pointerdown', prepareNativeScroll, {passive: true});
   track.addEventListener('wheel', () => {
     // Leave vertical wheel input to the page; native horizontal scrolling
     // remains in charge of distance, momentum and touch gestures.
-    if (track.scrollLeft < stride() || track.scrollLeft > limit() - stride()) syncPosition();
+    if (track.scrollLeft < stride() || track.scrollLeft > limit() - stride()) prepareNativeScroll();
     else moving = false;
   }, {passive: true});
-  new ResizeObserver(syncPosition).observe(track);
+  new ResizeObserver(() => {
+    if (layoutWidth !== track.clientWidth) {
+      clearTimeout(scrollTimer);
+      moving = false;
+      const index = Array.from(track.children).indexOf(anchor);
+      if (index >= 0) jump((index + anchorOffset) * stride());
+      layoutWidth = track.clientWidth;
+    }
+    syncPosition();
+  }).observe(track);
   recenter();
+  rememberPosition();
   updateControls();
 }
