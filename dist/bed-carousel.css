@@ -7,6 +7,8 @@
   .catalog-arrow:disabled{opacity:.3}
   .bed-carousel{grid-template-columns:none;grid-auto-flow:column;grid-auto-columns:calc((100% - 44px)/3);gap:22px;overflow-x:auto;overflow-y:hidden;min-width:0;padding:4px 0 14px;scroll-snap-type:x mandatory;scrollbar-width:thin;scrollbar-color:#cfc7bd transparent}
   .bed-carousel>.product-card{min-width:0;scroll-snap-align:start}
+  .bed-carousel{overflow-anchor:none;overscroll-behavior-x:contain}
+  .bed-carousel.is-recentering{scroll-snap-type:none;scroll-behavior:auto}
   .bed-carousel::-webkit-scrollbar{height:6px}
   .bed-carousel::-webkit-scrollbar-thumb{border-radius:6px;background:#cfc7bd}
   .bed-carousel:focus-visible{outline-offset:4px}
