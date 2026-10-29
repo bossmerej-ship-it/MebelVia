@@ -271,7 +271,7 @@ test('a pause or premature scrollend during a held pointer cannot end continuous
     assert.equal(f.first(), 'hanna');
     // Deliver scrollend and all idle timers while the pointer is still held.
     f.settle();
-    assert.equal(f.track.classes.has('is-recentering'), true, 'snap stays suspended until release');
+    assert.equal(f.track.classes.has('is-recentering'), true, 'gesture compensation stays active until release');
     let index = 1;
     for (const direction of [-1, 1]) {
       for (let count = 0; count < models.length * 2; count++) {
@@ -284,13 +284,13 @@ test('a pause or premature scrollend during a held pointer cannot end continuous
     f.event(releaseEvent);
     const visible = f.visible();
     f.settle();
-    assert.equal(f.track.classes.has('is-recentering'), false, 'release restores native snapping');
+    assert.equal(f.track.classes.has('is-recentering'), false, 'release completes gesture compensation');
     assert.deepEqual(f.visible(), visible, 'release does not change the visible products');
     assert.deepEqual(new Set(f.track.children), new Set(f.originals));
   }
 });
 
-test('releasing the mouse outside the carousel finishes its gesture and restores snapping', () => {
+test('releasing the mouse outside the carousel finishes its gesture cleanup', () => {
   const f = fixture();
   f.event('pointerup', { pointerType: 'mouse' }, f.document);
   f.event('pointerdown', { pointerType: 'mouse' });
@@ -331,7 +331,7 @@ test('native touch pointercancel does not end a held pan before the actual finge
     const visible = f.visible();
     f.event(releaseEvent, { touches: [] }, f.document);
     f.settle();
-    assert.equal(f.track.classes.has('is-recentering'), false, 'the actual touch release restores snapping');
+    assert.equal(f.track.classes.has('is-recentering'), false, 'the actual touch release finishes gesture compensation');
     assert.deepEqual(f.visible(), visible);
     assert.deepEqual(new Set(f.track.children), new Set(f.originals));
   }
@@ -368,4 +368,93 @@ test('line and page wheel units and Shift plus vertical wheel preserve their hor
   f.event('wheel', { deltaX: 0, deltaY: f.step(), shiftKey: true });
   assert.equal(f.first(), 'violetta');
   f.settle();
+});
+
+function visibleGeometry(f) {
+  return f.visible().map(id => {
+    const card = f.originals.find(original => original.id === id);
+    return { id, left: card.getBoundingClientRect().left };
+  });
+}
+
+function assertSameGeometry(actual, expected, message) {
+  assert.deepEqual(actual.map(card => card.id), expected.map(card => card.id), message);
+  for (let index = 0; index < expected.length; index++) {
+    assert.ok(Math.abs(actual[index].left - expected[index].left) < 1e-7,
+      `${message}: ${expected[index].id} moved from ${expected[index].left} to ${actual[index].left}`);
+  }
+}
+
+test('fractional wheel stops remain unchanged after timers and scrollend in both directions across the join', () => {
+  for (const sample of [
+    { start: -1, distance: 1.37, first: 'violetta' },
+    { start: 0, distance: -.37, first: 'monika' },
+    { start: 0, distance: .47, first: 'violetta' }
+  ]) {
+    const f = fixture();
+    if (sample.start) f.move(sample.start);
+    f.event('wheel', { deltaX: sample.distance * f.step(), deltaY: 0, deltaMode: 0 });
+    assert.equal(f.first(), sample.first);
+    const stopped = visibleGeometry(f);
+    assert.ok(Math.abs(stopped[0].left) > 1, 'the user stopped between cards');
+    const requestCount = f.requests.length;
+    f.settle();
+    assertSameGeometry(visibleGeometry(f), stopped, 'idle wheel cleanup must preserve the exact visual offset');
+    assert.ok(f.requests.slice(requestCount).every(request => request.behavior === 'instant'),
+      'cleanup must never start a smooth correction');
+    f.settle();
+    assertSameGeometry(visibleGeometry(f), stopped, 'a later scrollend must leave that offset alone too');
+  }
+});
+
+test('native pointer release preserves a fractional stop without adjusting either direction', () => {
+  for (const direction of [-1, 1]) {
+    const f = fixture();
+    f.event('pointerdown', { pointerType: 'mouse' });
+    f.nativeScroll(f.track.scrollLeft + direction * f.step() * .41);
+    const stopped = visibleGeometry(f);
+    assert.ok(Math.abs(stopped[0].left) > 1);
+    f.event('pointerup', { pointerType: 'mouse' }, f.document);
+    f.settle();
+    assertSameGeometry(visibleGeometry(f), stopped, 'pointer release and idle cleanup must keep the user position');
+  }
+});
+
+test('each arrow advances exactly one stride from a fractional stop and preserves that offset', () => {
+  for (const direction of [-1, 1]) {
+    const f = fixture();
+    f.event('wheel', { deltaX: f.step() * .41, deltaY: 0 });
+    f.settle();
+    const stopped = visibleGeometry(f);
+    assert.ok(Math.abs(stopped[0].left) > 1, 'arrow starts from an unsnapped position');
+    const position = f.track.scrollLeft;
+    f.move(direction, false);
+    assert.ok(Math.abs(f.requests.at(-1).left - position - direction * f.step()) < 1e-7,
+      'arrow movement is relative to the exact current position');
+    f.settle();
+    assert.equal(f.first(), direction > 0 ? 'hanna' : 'monika');
+    assert.ok(Math.abs(visibleGeometry(f)[0].left - stopped[0].left) < 1e-7);
+    f.move(-direction);
+    assertSameGeometry(visibleGeometry(f), stopped, 'opposite arrows return to the same visual position');
+  }
+});
+
+test('pointer takeover cancels an unfinished smooth arrow movement at its current offset', () => {
+  const f = fixture();
+  f.move(1, false);
+  assert.equal(f.requests.at(-1).behavior, 'smooth');
+  // The fixture scrolls immediately by default; this represents a browser
+  // animation observed before its previously requested destination is reached.
+  f.nativeScroll(f.track.scrollLeft - f.step() * .46);
+  const position = f.track.scrollLeft;
+  const stopped = visibleGeometry(f);
+  const requestCount = f.requests.length;
+  f.event('pointerdown', { pointerType: 'mouse' });
+  const cancellation = f.requests.slice(requestCount).find(request =>
+    request.behavior === 'instant' && Math.abs(request.left - position) < 1e-7);
+  assert.ok(cancellation, 'native pointer input must cancel the pending animation at its current position');
+  assertSameGeometry(visibleGeometry(f), stopped, 'cancelling the animation must not jump to its old destination');
+  f.event('pointerup', { pointerType: 'mouse' }, f.document);
+  f.settle();
+  assertSameGeometry(visibleGeometry(f), stopped, 'the cancelled animation stays cancelled after release');
 });
