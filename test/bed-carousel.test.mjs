@@ -9,7 +9,8 @@ const models = ['violetta', 'hanna', 'konor', 'tatlin', 'milano', 'silvia', 'sed
 
 // Model native scroll geometry and event delivery; no DOM library or GPU is needed.
 function fixture({ names = models, width = 354, cardWidth = width * .88, gap = 16, reduced = false } = {}) {
-  const document = { activeElement: null };
+  const document = new EventTarget();
+  document.activeElement = null;
   const frames = new Map(), timers = new Map(), requests = [];
   let token = 0, resized;
   class Element extends EventTarget {
@@ -88,10 +89,13 @@ function fixture({ names = models, width = 354, cardWidth = width * .88, gap = 1
       return rect.right > 1 && rect.left < track.clientWidth - 1;
     }).map(card => card.id);
   }
-  function event(type, properties = {}) {
-    const result = new Event(type, { cancelable: true });
+  function event(type, properties = {}, target = track) {
+    const result = new Event(type, { cancelable: true, bubbles: true });
     Object.assign(result, properties);
-    track.dispatchEvent(result);
+    target.dispatchEvent(result);
+    // EventTarget has no DOM ancestry; model bubbling to the document for
+    // release events whose target is the carousel or one of its children.
+    if (target !== document && !result.cancelBubble) document.dispatchEvent(result);
     return result;
   }
   function move(direction, finish = true) {
@@ -198,4 +202,170 @@ test('responsive resize preserves the selected bed while recalculating its physi
   assert.equal(f.first(), 'tatlin');
   f.move(-1);
   assert.equal(f.first(), 'konor');
+});
+
+test('horizontal wheel continues through both joins without waiting for scrollend', () => {
+  const f = fixture();
+  let index = 0;
+  for (const direction of [1, -1]) {
+    for (let count = 0; count < models.length * 3; count++) {
+      const wheel = f.event('wheel', { deltaX: direction * f.step(), deltaY: 0, deltaMode: 0 });
+      index = (index + direction + models.length) % models.length;
+      assert.equal(wheel.defaultPrevented, true);
+      assert.equal(f.first(), models[index], 'the wheel event itself must cross the join');
+      assert.ok(f.track.scrollLeft > 0 && f.track.scrollLeft < f.track.scrollWidth - f.track.clientWidth);
+    }
+  }
+  assert.equal(f.first(), 'violetta');
+  assert.deepEqual(new Set(f.track.children), new Set(f.originals));
+  f.settle();
+});
+
+test('one oversized wheel event consumes complete cycles without losing its remainder to clamping', () => {
+  for (const direction of [1, -1]) {
+    const f = fixture({ cardWidth: 300 });
+    const distance = (models.length * 123 + 1) * f.step();
+    const wheel = f.event('wheel', { deltaX: direction * distance, deltaY: 0, deltaMode: 0 });
+    assert.equal(wheel.defaultPrevented, true);
+    assert.equal(f.first(), direction > 0 ? 'hanna' : 'monika');
+    assert.deepEqual(new Set(f.track.children), new Set(f.originals));
+    assert.equal(f.track.children.length, models.length);
+    assert.ok(f.track.scrollLeft > 0 && f.track.scrollLeft < f.track.scrollWidth - f.track.clientWidth);
+    f.settle();
+    assert.equal(f.first(), direction > 0 ? 'hanna' : 'monika');
+  }
+});
+
+test('focused products cannot stop uninterrupted wheel and pointer scrolling at a physical edge', () => {
+  const f = fixture();
+  const focused = f.originals[0].button;
+  focused.focus();
+  let index = 0;
+  for (const direction of [-1, 1]) {
+    for (let count = 0; count < models.length * 2; count++) {
+      f.event('wheel', { deltaX: direction * f.step(), deltaY: 0 });
+      index = (index + direction + models.length) % models.length;
+      assert.equal(f.first(), models[index]);
+      assert.equal(f.document.activeElement, focused);
+    }
+  }
+  f.event('pointerdown');
+  for (const direction of [-1, 1]) {
+    for (let count = 0; count < models.length * 2; count++) {
+      f.nativeScroll(f.track.scrollLeft + direction * f.step());
+      index = (index + direction + models.length) % models.length;
+      assert.equal(f.first(), models[index], 'native scrolling must recycle before scrollend');
+      assert.equal(f.document.activeElement, focused, 'moving a focused original must restore its focus');
+      assert.ok(f.track.scrollLeft > 0 && f.track.scrollLeft < f.track.scrollWidth - f.track.clientWidth);
+    }
+  }
+  assert.deepEqual(new Set(f.track.children), new Set(f.originals));
+  f.settle();
+});
+
+test('a pause or premature scrollend during a held pointer cannot end continuous cycling', () => {
+  for (const releaseEvent of ['pointerup', 'pointercancel']) {
+    const f = fixture();
+    f.event('pointerdown');
+    f.nativeScroll(f.track.scrollLeft + f.step());
+    assert.equal(f.first(), 'hanna');
+    // Deliver scrollend and all idle timers while the pointer is still held.
+    f.settle();
+    assert.equal(f.track.classes.has('is-recentering'), true, 'snap stays suspended until release');
+    let index = 1;
+    for (const direction of [-1, 1]) {
+      for (let count = 0; count < models.length * 2; count++) {
+        f.nativeScroll(f.track.scrollLeft + direction * f.step());
+        index = (index + direction + models.length) % models.length;
+        assert.equal(f.first(), models[index], 'the same held gesture must continue after its pause');
+        assert.ok(f.track.scrollLeft > 0 && f.track.scrollLeft < f.track.scrollWidth - f.track.clientWidth);
+      }
+    }
+    f.event(releaseEvent);
+    const visible = f.visible();
+    f.settle();
+    assert.equal(f.track.classes.has('is-recentering'), false, 'release restores native snapping');
+    assert.deepEqual(f.visible(), visible, 'release does not change the visible products');
+    assert.deepEqual(new Set(f.track.children), new Set(f.originals));
+  }
+});
+
+test('releasing the mouse outside the carousel finishes its gesture and restores snapping', () => {
+  const f = fixture();
+  f.event('pointerup', { pointerType: 'mouse' }, f.document);
+  f.event('pointerdown', { pointerType: 'mouse' });
+  f.nativeScroll(f.track.scrollLeft + f.step());
+  f.settle();
+  assert.equal(f.first(), 'hanna');
+  assert.equal(f.track.classes.has('is-recentering'), true);
+  const visible = f.visible();
+  // This release never visits the carousel's own EventTarget.
+  f.event('pointerup', { pointerType: 'mouse' }, f.document);
+  f.settle();
+  assert.equal(f.track.classes.has('is-recentering'), false);
+  assert.deepEqual(f.visible(), visible);
+  f.move(-1);
+  assert.equal(f.first(), 'violetta');
+});
+
+test('native touch pointercancel does not end a held pan before the actual finger release', () => {
+  for (const releaseEvent of ['touchend', 'touchcancel']) {
+    const f = fixture();
+    f.event('pointerdown', { pointerType: 'touch' });
+    f.event('touchstart', { touches: [{ identifier: 1 }] });
+    f.nativeScroll(f.track.scrollLeft + f.step());
+    f.event('pointercancel', { pointerType: 'touch' });
+    f.settle();
+    assert.equal(f.track.classes.has('is-recentering'), true, 'browser ownership of panning is not a finger release');
+    let index = 1;
+    for (let count = 0; count < models.length * 2; count++) {
+      f.nativeScroll(f.track.scrollLeft + f.step());
+      index = (index + 1) % models.length;
+      assert.equal(f.first(), models[index], 'the same touch must keep cycling after its pause');
+    }
+    // A second finger ending must not finish the still-active first touch.
+    f.event('pointerup', { pointerType: 'touch' }, f.document);
+    f.event('touchend', { touches: [{ identifier: 1 }] }, f.document);
+    f.settle();
+    assert.equal(f.track.classes.has('is-recentering'), true);
+    const visible = f.visible();
+    f.event(releaseEvent, { touches: [] }, f.document);
+    f.settle();
+    assert.equal(f.track.classes.has('is-recentering'), false, 'the actual touch release restores snapping');
+    assert.deepEqual(f.visible(), visible);
+    assert.deepEqual(new Set(f.track.children), new Set(f.originals));
+  }
+});
+
+test('vertical, vertically dominant and browser zoom wheel gestures retain browser behavior', () => {
+  const f = fixture();
+  const position = f.track.scrollLeft;
+  for (const properties of [
+    { deltaX: 0, deltaY: 200 },
+    { deltaX: 30, deltaY: -200 },
+    { deltaX: 100, deltaY: 0, ctrlKey: true },
+    { deltaX: 100, deltaY: 0, metaKey: true }
+  ]) {
+    assert.equal(f.event('wheel', properties).defaultPrevented, false);
+    assert.equal(f.track.scrollLeft, position);
+    assert.equal(f.first(), 'violetta');
+  }
+});
+
+test('line and page wheel units and Shift plus vertical wheel preserve their horizontal distances', () => {
+  for (const deltaMode of [0, 1, 2]) {
+    const f = fixture({ width: 316, cardWidth: 300 });
+    const unit = deltaMode === 1 ? 16 : deltaMode === 2 ? f.track.clientWidth : 1;
+    assert.equal(f.event('wheel', { deltaX: f.step() / unit, deltaY: 0, deltaMode }).defaultPrevented, true);
+    assert.equal(f.first(), 'hanna');
+    f.event('wheel', { deltaX: -f.step() / unit, deltaY: 0, deltaMode });
+    assert.equal(f.first(), 'violetta');
+    f.settle();
+  }
+  const f = fixture({ cardWidth: 300 });
+  assert.equal(f.event('wheel', { deltaX: 0, deltaY: -f.step(), shiftKey: true }).defaultPrevented, true);
+  assert.equal(f.first(), 'monika');
+  f.event('wheel', { deltaX: 0, deltaY: f.step(), shiftKey: true });
+  assert.equal(f.first(), 'violetta');
+  f.settle();
 });
