@@ -1,8 +1,6 @@
 export function initBedCarousel() {
   const track = document.querySelector('#bed-grid');
-  const previous = document.querySelector('.catalog-arrow-prev');
-  const next = document.querySelector('.catalog-arrow-next');
-  if (!track || !previous || !next) return;
+  if (!track) return;
   const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
   let destination = track.scrollLeft;
   let scrollTimer;
@@ -19,10 +17,6 @@ export function initBedCarousel() {
 
   const limit = () => Math.max(0, track.scrollWidth - track.clientWidth);
   const stride = () => track.firstElementChild ? track.firstElementChild.getBoundingClientRect().width + (parseFloat(getComputedStyle(track).columnGap) || 0) : 0;
-
-  function updateControls() {
-    previous.disabled = next.disabled = limit() <= 1;
-  }
 
   // Keep real cards on either side of the viewport. Moving existing nodes
   // preserves their photo handlers and the product dialog's return target.
@@ -78,7 +72,7 @@ export function initBedCarousel() {
       recenter(true);
       destination = track.scrollLeft;
     }
-    // Rapid clicks can exhaust the physical buffer before smooth scrolling
+    // Repeated key presses can exhaust the buffer before smooth scrolling
     // finishes. Settle the requested card, then replenish that buffer.
     if (destination + direction * stride() < 0 || destination + direction * stride() > limit()) {
       track.scrollTo({left: destination, behavior: 'instant'});
@@ -91,8 +85,6 @@ export function initBedCarousel() {
     track.scrollTo({left: destination, behavior: reducedMotion.matches ? 'instant' : 'smooth'});
   }
 
-  previous.addEventListener('click', () => move(-1));
-  next.addEventListener('click', () => move(1));
   track.addEventListener('keydown', event => {
     if (event.key === 'Tab') nativeGesture = false;
     if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
@@ -111,7 +103,6 @@ export function initBedCarousel() {
     track.classList.remove('is-recentering');
     destination = track.scrollLeft;
     rememberPosition();
-    updateControls();
   }
 
   track.addEventListener('scroll', () => {
@@ -119,7 +110,6 @@ export function initBedCarousel() {
     // Replenish the buffer during a swipe, before a finger or inertia can
     // reach a physical endpoint. No scrollend is required to continue.
     if (nativeGesture && !moving && !wheelScrolling) recenter(true);
-    updateControls();
     rememberPosition();
     clearTimeout(scrollTimer);
     scrollTimer = setTimeout(syncPosition, 150);
@@ -131,7 +121,7 @@ export function initBedCarousel() {
     nativeGesture = pointerActive = true;
     clearTimeout(scrollTimer);
     moving = false;
-    // A new manual gesture takes over immediately from an arrow animation.
+    // A manual gesture takes over immediately from keyboard scrolling.
     track.scrollTo({left: track.scrollLeft, behavior: 'instant'});
     recenter(true);
     destination = track.scrollLeft;
@@ -194,5 +184,4 @@ export function initBedCarousel() {
   }).observe(track);
   recenter();
   rememberPosition();
-  updateControls();
 }
