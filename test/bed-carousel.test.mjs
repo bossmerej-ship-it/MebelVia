@@ -14,13 +14,12 @@ function fixture({ names = models, width = 354, cardWidth = width * .88, gap = 1
   const frames = new Map(), timers = new Map(), requests = [];
   let token = 0, resized;
   class Element extends EventTarget {
-    disabled = false;
     classes = new Set();
     classList = { add: value => this.classes.add(value), remove: value => this.classes.delete(value) };
     focus(options) { document.activeElement = this; this.focusOptions = options; }
     contains(element) { return element === this || this.button === element; }
   }
-  const track = new Element(), previous = new Element(), next = new Element();
+  const track = new Element();
   let children = names.map(id => {
     const card = new Element();
     card.id = id;
@@ -58,7 +57,7 @@ function fixture({ names = models, width = 354, cardWidth = width * .88, gap = 1
     }
   }
   track.scrollTo = options => { requests.push(options); nativeScroll(options.left); };
-  document.querySelector = selector => ({ '#bed-grid': track, '.catalog-arrow-prev': previous, '.catalog-arrow-next': next })[selector];
+  document.querySelector = selector => selector === '#bed-grid' ? track : null;
   vm.runInNewContext(`${source}\ninitBedCarousel();`, {
     document,
     matchMedia: () => ({ matches: reduced }),
@@ -99,22 +98,20 @@ function fixture({ names = models, width = 354, cardWidth = width * .88, gap = 1
     return result;
   }
   function move(direction, finish = true) {
-    (direction < 0 ? previous : next).dispatchEvent(new Event('click'));
+    event('keydown', { key: direction < 0 ? 'ArrowLeft' : 'ArrowRight' });
     if (finish) settle();
   }
   flushFrames();
   return {
-    track, previous, next, originals, document, requests, first, visible, settle, move, event, nativeScroll,
+    track, originals, document, requests, first, visible, settle, move, event, nativeScroll,
     step: () => cardWidth + gap,
     resize(newWidth, newCardWidth) { track.clientWidth = newWidth; cardWidth = newCardWidth; resized(); settle(); }
   };
 }
 
-test('first bed wraps backwards to Monika and forwards to Violetta without cloned cards', () => {
+test('without UI arrow controls the first bed wraps backwards to Monika and forwards to Violetta', () => {
   const f = fixture();
   assert.equal(f.first(), 'violetta');
-  assert.equal(f.previous.disabled, false);
-  assert.equal(f.next.disabled, false);
   f.move(-1);
   assert.equal(f.first(), 'monika');
   f.move(1);
@@ -123,7 +120,7 @@ test('first bed wraps backwards to Monika and forwards to Violetta without clone
   assert.deepEqual(new Set(f.track.children), new Set(f.originals));
 });
 
-test('each bed remains reachable through repeated cycles in both directions and rapid clicks', () => {
+test('each bed remains reachable through repeated cycles in both directions and rapid key presses', () => {
   const f = fixture();
   let index = 0;
   for (const direction of [-1, 1]) {
@@ -131,7 +128,6 @@ test('each bed remains reachable through repeated cycles in both directions and 
       f.move(direction, false);
       index = (index + direction + models.length) % models.length;
       assert.equal(f.first(), models[index]);
-      assert.equal(f.previous.disabled || f.next.disabled, false);
     }
     f.settle();
     assert.equal(f.first(), models[index]);
@@ -154,11 +150,9 @@ test('keyboard arrows wrap, modifiers retain their native behavior, and reduced 
   assert.ok(f.requests.every(request => request.behavior === 'instant'));
 });
 
-test('empty, single-card and fully visible catalogues stay stable with disabled arrows', () => {
+test('empty, single-card and fully visible catalogues ignore horizontal keyboard navigation', () => {
   for (const names of [[], ['violetta'], ['violetta', 'hanna', 'konor']]) {
     const f = fixture({ names, width: 1000, cardWidth: 300 });
-    assert.equal(f.previous.disabled, true);
-    assert.equal(f.next.disabled, true);
     f.move(-1); f.move(1);
     assert.deepEqual(f.track.children, f.originals);
     assert.equal(f.track.scrollLeft, 0);
@@ -420,26 +414,26 @@ test('native pointer release preserves a fractional stop without adjusting eithe
   }
 });
 
-test('each arrow advances exactly one stride from a fractional stop and preserves that offset', () => {
+test('each keyboard arrow advances exactly one stride from a fractional stop and preserves that offset', () => {
   for (const direction of [-1, 1]) {
     const f = fixture();
     f.event('wheel', { deltaX: f.step() * .41, deltaY: 0 });
     f.settle();
     const stopped = visibleGeometry(f);
-    assert.ok(Math.abs(stopped[0].left) > 1, 'arrow starts from an unsnapped position');
+    assert.ok(Math.abs(stopped[0].left) > 1, 'keyboard navigation starts from an unsnapped position');
     const position = f.track.scrollLeft;
     f.move(direction, false);
     assert.ok(Math.abs(f.requests.at(-1).left - position - direction * f.step()) < 1e-7,
-      'arrow movement is relative to the exact current position');
+      'keyboard movement is relative to the exact current position');
     f.settle();
     assert.equal(f.first(), direction > 0 ? 'hanna' : 'monika');
     assert.ok(Math.abs(visibleGeometry(f)[0].left - stopped[0].left) < 1e-7);
     f.move(-direction);
-    assertSameGeometry(visibleGeometry(f), stopped, 'opposite arrows return to the same visual position');
+    assertSameGeometry(visibleGeometry(f), stopped, 'opposite keyboard arrows return to the same visual position');
   }
 });
 
-test('pointer takeover cancels an unfinished smooth arrow movement at its current offset', () => {
+test('pointer takeover cancels an unfinished smooth keyboard movement at its current offset', () => {
   const f = fixture();
   f.move(1, false);
   assert.equal(f.requests.at(-1).behavior, 'smooth');
@@ -457,4 +451,30 @@ test('pointer takeover cancels an unfinished smooth arrow movement at its curren
   f.event('pointerup', { pointerType: 'mouse' }, f.document);
   f.settle();
   assertSameGeometry(visibleGeometry(f), stopped, 'the cancelled animation stays cancelled after release');
+});
+
+test('zero-gap cards keep fractional wheel stops through both joins and support one-step keyboard navigation', () => {
+  const f = fixture({ gap: 0, cardWidth: 300 });
+  assert.equal(f.step(), 300);
+  for (const { distance, first } of [
+    { distance: -.37, first: 'monika' },
+    { distance: 1, first: 'violetta' },
+    { distance: -1, first: 'monika' },
+    { distance: 1, first: 'violetta' }
+  ]) {
+    f.event('wheel', { deltaX: distance * f.step(), deltaY: 0, deltaMode: 0 });
+    assert.equal(f.first(), first, 'each wheel event crosses the join without waiting for idle');
+    assert.ok(Math.abs(visibleGeometry(f)[0].left + .63 * f.step()) < 1e-7);
+    assert.deepEqual(new Set(f.track.children), new Set(f.originals));
+  }
+  const stopped = visibleGeometry(f);
+  f.settle();
+  assertSameGeometry(visibleGeometry(f), stopped, 'zero-gap idle cleanup keeps the fractional position');
+  f.move(1);
+  assert.equal(f.first(), 'hanna');
+  assert.ok(Math.abs(visibleGeometry(f)[0].left - stopped[0].left) < 1e-7);
+  f.move(-1);
+  assertSameGeometry(visibleGeometry(f), stopped, 'opposite keyboard movement restores the zero-gap stop');
+  assert.equal(f.track.children.length, models.length);
+  assert.deepEqual(new Set(f.track.children), new Set(f.originals));
 });
