@@ -8,7 +8,7 @@ const source = readFileSync(new URL('../dist/reveal.js', import.meta.url), 'utf8
 
 // The fixture models the real section hierarchy, clipping in the horizontal
 // catalogue, observer delivery, and cancellable Web Animations without a GPU.
-function fixture({ reduced = false, scroll = 0, startTime = 1000, hash = '', hidden = false, navigationType = 'reload', readyState = 'loading', bootstrap = false, noObserver = false, noAnimate = false, observerError = false, animateError = false } = {}) {
+function fixture({ reduced = false, scroll = 0, startTime = 1000, hash = '', hidden = false, navigationType = 'reload', readyState = 'loading', bootstrap = false, noObserver = false, noAnimate = false, observerError = false, observerErrorAt = 0, animateError = false, pauseError = false, playError = false } = {}) {
   let now = startTime;
   const window = new EventTarget();
   Object.assign(window, { innerHeight: 800, innerWidth: 1200, scrollY: scroll, location: { hash } });
@@ -61,18 +61,26 @@ function fixture({ reduced = false, scroll = 0, startTime = 1000, hash = '', hid
       return { top, bottom: top + this.height, left, right: left + this.width, width: this.width, height: this.height };
     }
     animate(frames, options) {
-      if (this.parentElement?.id === 'bed-grid' && firstBedAnimationSawAllMarked === undefined) {
-        firstBedAnimationSawAllMarked = this.parentElement.children.every(card => card.dataset.revealState === 'done');
-      }
-      if (this.parentElement?.classes.has('delivery-inner') && firstDeliveryAnimationSawAllMarked === undefined) {
-        firstDeliveryAnimationSawAllMarked = this.parentElement.children.every(child => child.dataset.revealState === 'done');
-      }
       if (animateError) throw new Error('Animation API unavailable');
       let resolve, reject;
       const animation = {
         cancelled: false,
+        playState: 'running',
+        plays: 0,
+        currentTime: null,
         finished: new Promise((yes, no) => { resolve = yes; reject = no; }),
         cancel() { this.cancelled = true; reject(new Error('Animation cancelled')); },
+        pause() { if (pauseError) throw new Error('Pause rejected'); this.playState = 'paused'; },
+        play: () => {
+          if (playError) throw new Error('Play rejected');
+          animation.playState = 'running'; animation.plays++;
+          if (this.parentElement?.id === 'bed-grid' && firstBedAnimationSawAllMarked === undefined) {
+            firstBedAnimationSawAllMarked = this.parentElement.children.every(card => card.dataset.revealState === 'done' || card.dataset.revealState === 'running');
+          }
+          if (this.parentElement?.classes.has('delivery-inner') && firstDeliveryAnimationSawAllMarked === undefined) {
+            firstDeliveryAnimationSawAllMarked = this.parentElement.children.every(child => child.dataset.revealState === 'done' || child.dataset.revealState === 'running');
+          }
+        },
         finish() { resolve(); }
       };
       effects.push({ element: this, frames, options, animation });
@@ -120,7 +128,7 @@ function fixture({ reduced = false, scroll = 0, startTime = 1000, hash = '', hid
   document.getElementById = id => id === 'top' ? main : main.querySelectorAll(`#${id}`)[0];
   class IntersectionObserver {
     constructor(callback, options) {
-      if (observerError) throw new Error('Observer creation failed');
+      if (observerError || observerErrorAt === observers.length + 1) throw new Error('Observer creation failed');
       this.callback = callback; this.options = options; this.observed = new Set(); observers.push(this);
     }
     observe(element) { this.observed.add(element); }
@@ -144,6 +152,16 @@ function fixture({ reduced = false, scroll = 0, startTime = 1000, hash = '', hid
     firstBedMarked: () => firstBedAnimationSawAllMarked,
     firstDeliveryMarked: () => firstDeliveryAnimationSawAllMarked,
     enter(...elements) { observers[0]?.callback(elements.map(target => ({ target, isIntersecting: true, boundingClientRect: target.getBoundingClientRect() }))); },
+    prepare(...elements) { observers[1]?.callback(elements.map(target => ({target,isIntersecting:true,boundingClientRect:target.getBoundingClientRect()}))); },
+    release(...elements) { observers[2]?.callback(elements.map(target => ({target,isIntersecting:false,boundingClientRect:target.getBoundingClientRect()}))); },
+    arrive(...elements) {
+      // A normal approach first crosses the offscreen preparatory band, then
+      // the real viewport. No animation time elapses during that interval.
+      elements.forEach(element => {element.top = window.scrollY + window.innerHeight + 40;});
+      observers[1]?.callback(elements.map(target => ({target,isIntersecting:true,boundingClientRect:target.getBoundingClientRect()})));
+      elements.forEach(element => {element.top = window.scrollY + window.innerHeight - 1;});
+      observers[0]?.callback(elements.map(target => ({target,isIntersecting:true,boundingClientRect:target.getBoundingClientRect()})));
+    },
     advance(ms) { now += ms; },
     scroll(y, ms = 16) { now += ms; window.scrollY = y; window.dispatchEvent(new Event('scroll')); },
     interaction(type, target) { event(type, target); },
@@ -197,6 +215,8 @@ test('a deep reload preserves first entrances above the viewport when scrolling 
   assert.ok(f.rows.every(row => row.dataset.revealState === 'done'), 'answers already visible after reload stay still');
   assert.equal(f.effects.length, 0);
   // A slow upward gesture exposes the bottom of the delivery group first.
+  f.scroll(3460, 160);
+  f.prepare(f.deliveryGroup);
   f.scroll(3300, 160);
   assert.ok(f.deliveryGroup.getBoundingClientRect().top < 0);
   assert.ok(f.deliveryGroup.getBoundingClientRect().bottom > 0);
@@ -269,102 +289,155 @@ test('reload and back navigation remain readable when the browser restores scrol
 
 test('the optional module starts at interactive readiness and waits only while the document is loading', () => {
   const interactive = fixture({ readyState: 'interactive', bootstrap: true });
-  assert.equal(interactive.observers.length, 1);
+  assert.equal(interactive.observers.length, 3);
   assert.equal(interactive.heading.dataset.revealState, 'pending');
   interactive.document.dispatchEvent(new Event('DOMContentLoaded'));
-  assert.equal(interactive.observers.length, 1, 'DOMContentLoaded must not initialize the module twice');
+  assert.equal(interactive.observers.length, 3, 'DOMContentLoaded must not initialize the module twice');
 
   const loading = fixture({ readyState: 'loading', bootstrap: true });
   assert.equal(loading.observers.length, 0);
   loading.document.dispatchEvent(new Event('DOMContentLoaded'));
-  assert.equal(loading.observers.length, 1);
+  assert.equal(loading.observers.length, 3);
 });
 
-test('slow scroll entrances start at the viewport instead of being spent offscreen', () => {
+test('offscreen preparation pauses at time zero and plays the same effect only on entry', () => {
   const f = fixture();
   assert.equal(f.observers[0].options.rootMargin, '0px');
-  assert.equal(f.observers[0].options.threshold, 0);
-  assert.equal(f.observers[0].observed.has(f.heading), true);
-  assert.equal(f.heading.dataset.revealState, 'pending');
-  // Waiting while the next heading is below the viewport cannot consume its
-  // entrance. The exact-viewport observer delivers only once it comes in.
+  assert.ok(f.observers[0].options.threshold > 0);
   f.heading.top = 820;
-  f.advance(1500);
-  assert.equal(f.effects.length, 0);
-  assert.equal(f.heading.dataset.revealState, 'pending');
+  f.prepare(f.heading);
+  assert.equal(f.heading.dataset.revealState, 'prepared');
+  assert.equal(f.effects.length, 1);
+  const original = f.effects[0].animation;
+  assert.equal(original.playState, 'paused');
+  assert.equal(original.currentTime, 0);
+  f.advance(5000);
+  assert.equal(original.plays, 0, 'a slow visitor cannot spend the entrance offscreen');
+  assert.equal(original.currentTime, 0);
   f.heading.top = 799;
   f.enter(f.heading);
+  assert.equal(f.effects.length, 1, 'entry never creates a fresh offset on painted content');
+  assert.equal(f.effects[0].animation, original);
+  assert.equal(original.plays, 1);
   assert.equal(f.heading.dataset.revealState, 'running');
-  assert.equal(f.effects[0].options.duration, 700);
-  assert.equal(f.effects[0].frames[0].opacity, .5);
-  // A late callback keeps all painted text visible while moving it softly.
-  f.description.top = 680;
-  f.enter(f.description);
-  assert.equal(f.description.dataset.revealState, 'running');
-  assert.equal(f.effects.length, 2);
-  assert.ok(f.effects[1].frames.every(frame => frame.opacity === 1), 'late delivery must not fade text already fully on screen');
-  assertNaturalStyles(f.description);
+  assertNaturalStyles(f.heading);
 });
 
-test('opacity changes only for actual arrivals within 96px of either viewport edge', () => {
-  for (const {top, opacity} of [
-    {top: 799, opacity: .5}, {top: 704, opacity: .5},
-    {top: -20, opacity: .5}, {top: 36, opacity: .5},
-    {top: 703, opacity: 1}, {top: 400, opacity: 1}, {top: 37, opacity: 1}
-  ]) {
+test('late and raced callbacks keep already painted content at its natural position', () => {
+  for (const top of [799, 704, 400, 36, -20]) {
     const f = fixture();
     f.heading.top = top;
+    f.prepare(f.heading); // A late preparation callback is not safe to stage.
     f.enter(f.heading);
-    assert.equal(f.effects.length, 1);
-    assert.equal(f.effects[0].frames[0].opacity, opacity, `top ${top} should ${opacity === 1 ? 'keep painted text opaque' : 'use a short edge fade'}`);
-    assert.equal(f.effects[0].frames.at(-1).opacity, 1);
-    assert.equal(f.effects[0].frames[0].translate, '0 24px');
+    assert.equal(f.effects.length, 0, `top ${top} must not jump backwards into a fresh offset`);
+    assert.equal(f.heading.dataset.revealState, 'done');
     assertNaturalStyles(f.heading);
+  }
+  const grouped = fixture();
+  grouped.track.top = grouped.deliveryGroup.top = 400;
+  grouped.prepare(grouped.track, grouped.deliveryGroup);
+  grouped.enter(grouped.track, grouped.deliveryGroup);
+  assert.equal(grouped.effects.length, 0);
+  assert.ok(grouped.cards.every(card => card.dataset.revealState === 'done'));
+  assert.equal(grouped.deliveryCopy.dataset.revealState, 'done');
+  assert.equal(grouped.image.dataset.revealState, 'done');
+});
+
+test('reverse first arrivals are prepared above the screen and move with their entry direction', () => {
+  const f = fixture({scroll:3600,hash:'#faq'});
+  f.deliveryGroup.top = 3500; // bottom is -40, safely beyond every vertical offset.
+  f.heading.top = 3500;
+  f.prepare(f.heading, f.deliveryGroup);
+  assert.equal(f.effects.length, 3);
+  assert.equal(f.effects.find(effect => effect.element === f.heading).frames[0].translate, '0 -24px');
+  f.heading.top = f.deliveryGroup.top = 3550;
+  f.enter(f.heading, f.deliveryGroup);
+  assert.ok(f.effects.every(effect => effect.animation.plays === 1));
+  assert.ok(f.effects.every(effect => effect.frames[0].opacity === .5));
+  assert.equal(f.deliveryCopy.dataset.revealState, 'running');
+  f.enter(f.heading, f.deliveryGroup);
+  assert.equal(f.effects.length, 3, 'reverse visits also remain one-shot');
+});
+
+test('preparation release hysteresis prevents offset feedback and re-arms only unseen content', () => {
+  const f = fixture();
+  f.heading.top = 1039; // edge of the 240px preparation band.
+  f.prepare(f.heading);
+  const first = f.effects[0].animation;
+  assert.equal(f.observers[1].observed.has(f.heading), false);
+  assert.equal(f.observers[2].observed.has(f.heading), true);
+  // The +24px staging offset can cross the prep edge, but its queued exit
+  // must not cancel/recreate the animation. The wider release band owns this.
+  f.observers[1].callback([{target:f.heading,isIntersecting:false}]);
+  assert.equal(first.cancelled, false);
+  assert.equal(f.effects.length, 1);
+  f.heading.top = 1200;
+  f.release(f.heading);
+  assert.equal(first.cancelled, true);
+  assert.equal(f.heading.dataset.revealState, 'pending');
+  assert.equal(f.observers[1].observed.has(f.heading), true);
+  f.heading.top = 820;
+  f.prepare(f.heading);
+  assert.equal(f.effects.length, 2);
+  f.heading.top = 800;
+  f.enter(f.heading);
+  assert.equal(f.effects[1].animation.cancelled, false, 'an edge-adjacent zero-area entry keeps its prepared pose');
+  f.heading.top = 799;
+  f.enter(f.heading);
+  assert.equal(f.effects[1].animation.plays, 1);
+  assert.equal(f.observers[2].observed.has(f.heading), false);
+});
+
+test('paused entrances fail open when pause, play or either extra observer is rejected', () => {
+  for (const options of [{pauseError:true}, {playError:true}, {observerErrorAt:2}, {observerErrorAt:3}]) {
+    const f = fixture(options);
+    f.arrive(f.heading, f.deliveryGroup, f.track);
+    assert.ok(f.effects.every(effect => effect.animation.cancelled));
+    assertNaturalStyles(f.heading, f.deliveryCopy, f.image, ...f.cards);
+    assert.equal(f.heading.dataset.revealState, 'done');
+    assert.equal(f.deliveryGroup.dataset.revealState, 'done');
+    assert.ok(f.cards.every(card => card.dataset.revealState === 'done'));
+    assert.doesNotThrow(f.dispose);
   }
 });
 
-test('groups fade only on incoming edges while late fully visible groups keep their opacity', () => {
-  for (const top of [799, 400]) {
+test('navigation, fast gestures, focus and visibility release paused content without replaying it', () => {
+  for (const operation of ['link','fast','focus','hidden','reduced','dispose']) {
     const f = fixture();
-    f.track.top = top;
-    f.deliveryGroup.top = top;
-    f.enter(f.track, f.deliveryGroup);
-    assert.equal(f.effects.length, 5);
-    assert.ok(f.effects.every(({frames}) => frames[0].opacity === (top === 799 ? .5 : 1) && frames.at(-1).opacity === 1));
-    assert.ok(f.cards.every(card => card.dataset.revealState === 'done' || card.dataset.revealState === 'running'));
-    assert.equal(f.deliveryCopy.dataset.revealState, 'running');
-    assert.equal(f.image.dataset.revealState, 'running');
-    f.track.top = f.deliveryGroup.top = 900;
-    f.enter(f.track, f.deliveryGroup);
-    assert.equal(f.effects.length, 5, 'entrances remain one-shot');
-    assertNaturalStyles(...f.cards, f.deliveryCopy, f.image);
+    f.heading.top = f.action.top = 840;
+    f.prepare(f.heading, f.action);
+    assert.equal(f.effects.length,2);
+    assert.ok(f.effects.every(effect => effect.animation.playState === 'paused' && effect.animation.plays === 0));
+    if (operation === 'link') f.clickAnchor();
+    else if (operation === 'fast') f.scroll(700,16);
+    else if (operation === 'focus') {f.interaction('focusin',f.heading);f.interaction('focusin',f.actionIcon);}
+    else if (operation === 'hidden') f.visible(false);
+    else if (operation === 'reduced') f.reduced(true);
+    else f.dispose();
+    assert.ok(f.effects.every(effect => effect.animation.cancelled),operation);
+    assertNaturalStyles(f.heading,f.action);
+    if (['link','fast','hidden'].includes(operation)) {
+      assert.equal(f.heading.dataset.revealState,'pending','skipping transit must not consume an unseen entrance');
+      if (operation === 'hidden') f.visible(true);
+      f.advance(1200);
+      f.arrive(f.heading);
+      assert.equal(f.effects.length,3);
+      assert.equal(f.effects.at(-1).animation.plays,1);
+    }
   }
-  const passed = fixture();
-  passed.track.top = -600;
-  passed.deliveryGroup.top = -100;
-  passed.enter(passed.track, passed.deliveryGroup);
-  assert.equal(passed.effects.length, 0);
-  assert.equal(passed.track.dataset.revealState, 'pending');
-  assert.equal(passed.deliveryGroup.dataset.revealState, 'pending');
-  assert.ok(passed.cards.every(card => card.dataset.revealState === undefined));
-  assert.equal(passed.deliveryCopy.dataset.revealState, undefined);
-  assert.equal(passed.image.dataset.revealState, undefined);
-  passed.track.top = passed.deliveryGroup.top = 799;
-  passed.enter(passed.track, passed.deliveryGroup);
-  assert.equal(passed.effects.length, 5, 'a late passed callback cannot consume the next real entry');
 });
 
 test('text, actions and card batches use bounded motion without replacing hover transforms', () => {
   const f = fixture();
-  f.enter(f.heading, f.description, f.action, ...f.mattressCards, ...f.rows);
+  f.arrive(f.heading, f.description, f.action, ...f.mattressCards, ...f.rows);
   assert.equal(f.effects.length, 9);
   for (const { frames, options } of f.effects) {
     assert.ok(options.duration >= 650 && options.duration <= 700);
     assert.ok(options.delay >= 0 && options.delay <= 120);
-    assert.equal(options.fill, 'backwards');
+    assert.equal(options.fill, 'both');
     assert.match(options.easing, /cubic-bezier/);
     assert.ok(frames.every(frame => !('transform' in frame) && !('scale' in frame) && !('rotate' in frame)));
-    assert.equal(frames[0].opacity, 1);
+    assert.equal(frames[0].opacity, .5);
     assert.equal(frames.at(-1).opacity, 1);
     if ('translate' in frames[0]) {
       const distance = Number(frames[0].translate.match(/^0 (\d+)px$/)?.[1]);
@@ -373,7 +446,7 @@ test('text, actions and card batches use bounded motion without replacing hover 
   }
   assert.deepEqual(f.effects.filter(effect => f.mattressCards.includes(effect.element)).map(effect => effect.options.delay), [0, 60, 120]);
   const count = f.effects.length;
-  f.enter(f.heading, ...f.mattressCards);
+  f.arrive(f.heading, ...f.mattressCards);
   assert.equal(f.effects.length, count, 'returning to a section must not restart its reveal');
 });
 
@@ -385,13 +458,13 @@ test('delivery enters once as a synchronized horizontal pair with opposite direc
   }
   f.enter(f.deliveryTitle, f.image);
   assert.equal(f.effects.length, 0, 'nested children must not launch independent effects');
-  f.enter(f.deliveryGroup);
+  f.arrive(f.deliveryGroup);
   assert.equal(f.firstDeliveryMarked(), true, 'both children must be marked before either animation starts');
   assert.equal(f.effects.length, 2);
   const copy = f.effects.find(effect => effect.element === f.deliveryCopy);
   const truck = f.effects.find(effect => effect.element === f.image);
-  assert.deepEqual(Array.from(copy.frames, frame => ({ ...frame })), [{ opacity: 1, translate: '-44px 0' }, { opacity: 1, translate: '0 0' }]);
-  assert.deepEqual(Array.from(truck.frames, frame => ({ ...frame })), [{ opacity: 1, translate: '44px 0' }, { opacity: 1, translate: '0 0' }]);
+  assert.deepEqual(Array.from(copy.frames, frame => ({ ...frame })), [{ opacity: .5, translate: '-44px 0' }, { opacity: 1, translate: '0 0' }]);
+  assert.deepEqual(Array.from(truck.frames, frame => ({ ...frame })), [{ opacity: .5, translate: '44px 0' }, { opacity: 1, translate: '0 0' }]);
   for (const effect of [copy, truck]) {
     assert.equal(effect.options.duration, 700);
     assert.equal(effect.options.delay, 0);
@@ -405,8 +478,8 @@ test('delivery enters once as a synchronized horizontal pair with opposite direc
 
 test('delivery remains naturally visible after animation failure and under reduced motion', () => {
   const failed = fixture({ animateError: true });
-  failed.enter(failed.deliveryGroup);
-  assert.equal(failed.firstDeliveryMarked(), true);
+  failed.arrive(failed.deliveryGroup);
+  assert.equal(failed.firstDeliveryMarked(), undefined);
   assert.equal(failed.effects.length, 0);
   for (const element of [failed.deliveryGroup, failed.deliveryCopy, failed.image]) {
     assert.equal(element.dataset.revealState, 'done');
@@ -420,7 +493,7 @@ test('delivery remains naturally visible after animation failure and under reduc
   assert.equal(initial.deliveryCopy.dataset.revealState, 'done');
   assert.equal(initial.image.dataset.revealState, 'done');
   const active = fixture();
-  active.enter(active.deliveryGroup);
+  active.arrive(active.deliveryGroup);
   active.reduced(true);
   assert.equal(active.effects.length, 2);
   assert.ok(active.effects.every(effect => effect.animation.cancelled));
@@ -429,7 +502,7 @@ test('delivery remains naturally visible after animation failure and under reduc
 
 test('all nine original bed cards are marked before the visible batch animates and recycling never restarts it', () => {
   const f = fixture();
-  f.enter(f.track);
+  f.arrive(f.track);
   assert.equal(f.firstBedMarked(), true);
   assert.deepEqual(f.effects.map(effect => effect.element), f.cards.slice(0, 3));
   assert.deepEqual(f.effects.map(effect => effect.options.delay), [0, 60, 120]);
@@ -447,7 +520,7 @@ test('reduced motion starts immediately and turning it on cancels active effects
   assert.equal(initial.effects.length, 0);
   assert.ok(initial.cards.every(card => card.dataset.revealState === 'done'));
   const f = fixture();
-  f.enter(f.heading, f.track);
+  f.arrive(f.heading, f.track);
   f.reduced(true);
   assert.ok(f.effects.every(effect => effect.animation.cancelled));
   assert.equal(f.observers[0].disconnected, true);
@@ -459,11 +532,11 @@ test('reduced motion starts immediately and turning it on cancels active effects
 
 test('fast vertical scrolling lets current effects settle naturally and skips newly passed content', async () => {
   const f = fixture();
-  f.enter(f.heading);
+  f.arrive(f.heading);
   f.scroll(1000, 20);
   assert.equal(f.effects[0].animation.cancelled, false);
   assert.equal(f.heading.dataset.revealState, 'running');
-  f.enter(f.description);
+  f.arrive(f.description);
   assert.equal(f.description.dataset.revealState, 'pending');
   assert.equal(f.effects.length, 1);
   f.effects[0].animation.finish();
@@ -471,64 +544,64 @@ test('fast vertical scrolling lets current effects settle naturally and skips ne
   assert.equal(f.heading.dataset.revealState, 'done');
   f.advance(300);
   f.action.top = 2000;
-  f.enter(f.action);
+  f.arrive(f.action);
   assert.equal(f.effects.length, 2, 'later unvisited content may reveal after fast scrolling stops');
 });
 
 test('ordinary 120px wheel ticks do not cancel a reveal based on one 16ms frame', () => {
   const f = fixture();
-  f.enter(f.heading);
+  f.arrive(f.heading);
   f.scroll(120, 16);
   assert.equal(f.effects[0].animation.cancelled, false);
-  f.enter(f.description);
+  f.arrive(f.description);
   assert.equal(f.description.dataset.revealState, 'running');
   f.scroll(240, 16);
   assert.ok(f.effects.every(effect => !effect.animation.cancelled));
-  f.enter(f.action);
+  f.arrive(f.action);
   assert.equal(f.action.dataset.revealState, 'running');
 });
 
 test('rapid wheel ticks are classified by their accumulated travel within the short sample window', () => {
   const f = fixture();
-  f.enter(f.heading);
+  f.arrive(f.heading);
   for (const y of [120, 240, 360, 480]) {
     f.scroll(y, 16);
     assert.equal(f.effects[0].animation.cancelled, false);
   }
   f.scroll(620, 16);
   assert.equal(f.effects[0].animation.cancelled, false);
-  f.enter(f.description);
+  f.arrive(f.description);
   assert.equal(f.description.dataset.revealState, 'pending');
   assert.equal(f.effects.length, 1);
   f.advance(300);
   f.action.top = 2000;
-  f.enter(f.action);
+  f.arrive(f.action);
   assert.equal(f.action.dataset.revealState, 'running');
 });
 
 test('ordinary scrolling over separate sample windows does not accumulate into a false fast gesture', () => {
   const f = fixture();
   f.description.top = 2000;
-  f.enter(f.heading);
+  f.arrive(f.heading);
   for (const y of [250, 500, 750, 1000]) {
     f.scroll(y, 130);
     assert.equal(f.effects[0].animation.cancelled, false);
   }
-  f.enter(f.description);
+  f.arrive(f.description);
   assert.equal(f.description.dataset.revealState, 'running');
 });
 
 test('section links and hash targets become usable immediately, including the whole bed catalogue', () => {
   const f = fixture();
-  f.enter(f.heading);
+  f.arrive(f.heading);
   f.clickAnchor();
   assert.equal(f.effects[0].animation.cancelled, true);
-  f.enter(f.mattressTitle);
+  f.arrive(f.mattressTitle);
   assert.equal(f.effects.length, 1);
   f.hash('#beds');
   assert.equal(f.bedsTitle.dataset.revealState, 'done');
   assert.ok(f.cards.every(card => card.dataset.revealState === 'done'));
-  f.enter(f.track);
+  f.arrive(f.track);
   assert.equal(f.effects.length, 1);
   assert.doesNotThrow(() => f.hash('#%invalid'));
 });
@@ -545,7 +618,7 @@ test('a #top jump settles the hero without consuming unseen sections inside main
   f.scroll(0, 1000);
   f.advance(300);
   f.heading.top = 799;
-  f.enter(f.heading);
+  f.arrive(f.heading);
   assert.equal(f.heading.dataset.revealState, 'running');
   assert.equal(f.effects.length, 1);
   assert.ok(f.cards.every(card => card.dataset.revealState !== 'done'), 'the distant catalogue has not been consumed by #top');
@@ -560,7 +633,7 @@ test('callbacks crossed during #top transit preserve unseen catalogue entrances'
   f.scroll(2400, 100);
   f.enter(f.mattressTitle, ...f.mattressCards);
   f.scroll(1800, 100);
-  f.enter(f.track);
+  f.arrive(f.track);
   assert.equal(f.effects.length, 0);
   assert.equal(f.track.dataset.revealState, 'pending');
   assert.equal(f.mattressTitle.dataset.revealState, 'pending');
@@ -570,11 +643,11 @@ test('callbacks crossed during #top transit preserve unseen catalogue entrances'
   f.scroll(0, 800);
   f.advance(300);
   f.track.top = 799;
-  f.enter(f.track);
+  f.arrive(f.track);
   assert.equal(f.effects.length, 3);
   assert.equal(f.track.dataset.revealState, 'done');
   f.mattressTitle.top = 799;
-  f.enter(f.mattressTitle);
+  f.arrive(f.mattressTitle);
   assert.equal(f.mattressTitle.dataset.revealState, 'running');
   assert.equal(f.effects.length, 4);
   assertNaturalStyles(f.track, ...f.cards, f.mattressTitle);
@@ -583,13 +656,13 @@ test('callbacks crossed during #top transit preserve unseen catalogue entrances'
 test('a hidden observer callback cannot consume an unseen entrance', () => {
   const f = fixture();
   f.visible(false);
-  f.enter(f.heading);
+  f.arrive(f.heading);
   assert.equal(f.heading.dataset.revealState, 'pending');
   assert.equal(f.effects.length, 0);
   assert.equal(f.observers[0].observed.has(f.heading), true);
   f.visible(true);
   f.heading.top = 799;
-  f.enter(f.heading);
+  f.arrive(f.heading);
   assert.equal(f.heading.dataset.revealState, 'running');
   assert.equal(f.effects.length, 1);
 });
@@ -597,7 +670,7 @@ test('a hidden observer callback cannot consume an unseen entrance', () => {
 test('focus or pointer input finishes a containing reveal and prevents a pending action from hiding', () => {
   for (const type of ['focusin', 'pointerdown']) {
     const f = fixture();
-    f.enter(f.action);
+    f.arrive(f.action);
     f.interaction(type, f.actionIcon);
     assert.equal(f.effects[0].animation.cancelled, true);
     assert.equal(f.action.dataset.revealState, 'done');
@@ -610,7 +683,7 @@ test('focus or pointer input finishes a containing reveal and prevents a pending
 
 test('starting a swipe on text or a card blank area never cancels a running entrance', () => {
   const f = fixture();
-  f.enter(f.heading, f.track);
+  f.arrive(f.heading, f.track);
   f.interaction('pointerdown', f.heading);
   f.interaction('pointerdown', f.cards[0]);
   assert.ok(f.effects.every(effect => !effect.animation.cancelled));
@@ -622,16 +695,16 @@ test('starting a swipe on text or a card blank area never cancels a running entr
 
 test('hidden documents and disposal cancel active animations without retaining hidden inline styles', async () => {
   const f = fixture();
-  f.enter(f.heading, f.deliveryGroup);
+  f.arrive(f.heading, f.deliveryGroup);
   f.visible(false);
   assert.ok(f.effects.every(effect => effect.animation.cancelled));
   f.visible(true);
-  f.enter(f.action);
+  f.arrive(f.action);
   const action = f.effects.at(-1);
   action.animation.finish();
   await Promise.resolve();
   assert.equal(f.action.dataset.revealState, 'done');
-  f.enter(f.description);
+  f.arrive(f.description);
   f.dispose();
   assert.ok(f.effects.every(effect => effect.animation.cancelled));
   assert.equal(f.observers[0].disconnected, true);

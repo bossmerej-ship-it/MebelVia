@@ -7,7 +7,10 @@ export function initReveals() {
   const records = new Map();
   const seen = new WeakSet();
   const active = new Map();
+  const prepared = new Map();
   let observer;
+  let preparationObserver;
+  let releaseObserver;
   let lastY = window.scrollY;
   const startedAt = performance.now();
   let sampleStart = startedAt;
@@ -38,6 +41,8 @@ export function initReveals() {
     seen.add(element);
     element.dataset.revealState = 'done';
     observer?.unobserve(element);
+    preparationObserver?.unobserve(element);
+    releaseObserver?.unobserve(element);
   }
 
   function finish(element) {
@@ -47,60 +52,126 @@ export function initReveals() {
     element.dataset.revealState = 'done';
   }
 
-  function animate(element, kind, delay, opacity = 1) {
+  function createAnimation(element, kind, delay, direction) {
     const horizontal = kind === 'delivery-copy' || kind === 'delivery-truck';
     const distance = kind === 'action' || kind === 'row' ? 18 : kind === 'card' ? 28 : 24;
-    const offset = horizontal ? `${kind === 'delivery-copy' ? -44 : 44}px 0` : `0 ${distance}px`;
-    // Only a genuinely incoming edge may fade. Late callbacks retain full
-    // opacity, so readable text cannot disappear before its entrance plays.
-    const from = {opacity, translate: offset};
+    const offset = horizontal ? `${kind === 'delivery-copy' ? -44 : 44}px 0` : `0 ${distance * direction}px`;
+    const from = {opacity: .5, translate: offset};
     const to = {opacity: 1, translate: '0 0'};
+    let animation;
     try {
       // Individual translate composes with the existing card hover transform.
-      const animation = element.animate([from, to], {
+      animation = element.animate([from, to], {
         duration: kind === 'action' || kind === 'row' ? 650 : 700,
         delay: Math.min(delay, 120),
         easing: 'cubic-bezier(.22,.68,.28,1)',
-        fill: 'backwards'
+        fill: 'both'
       });
-      active.set(element, animation);
-      element.dataset.revealState = 'running';
-      const release = () => {
-        if (active.get(element) === animation) finish(element);
-      };
-      animation.finished.then(release, release);
+      // Install the offset while the target is safely offscreen. Nothing
+      // advances until the exact-viewport observer plays this same animation.
+      animation.finished.catch(() => {});
+      animation.pause();
+      animation.currentTime = 0;
+      return animation;
     } catch {
-      finish(element);
+      animation?.cancel();
+      throw new Error('Entrance preparation failed');
     }
   }
 
-  function enter(record, play, delay = record.delay, opacity = 1) {
+  function plan(record, delay = record.delay) {
     const {element, kind} = record;
-    if (seen.has(element)) return;
-    mark(element);
     if (kind === 'delivery-group') {
       const copy = element.querySelector('.delivery-copy');
       const truck = element.querySelector('.delivery-porter');
-      // One observer entry starts both sides together. Mark both first, so
-      // reduced motion, failed animation or revisiting never hides either.
-      [copy, truck].filter(Boolean).forEach(mark);
-      if (play) {
-        if (copy) animate(copy, 'delivery-copy', 0, opacity);
-        if (truck) animate(truck, 'delivery-truck', 0, opacity);
-      }
+      return {members: [copy, truck].filter(Boolean), targets: [
+        ...(copy ? [{element: copy, kind: 'delivery-copy', delay: 0}] : []),
+        ...(truck ? [{element: truck, kind: 'delivery-truck', delay: 0}] : [])
+      ]};
     } else if (kind === 'bed-list') {
       const cards = Array.from(element.children);
-      // Mark the entire original set first. Recycled or newly scrolled-in
-      // cards remain visible and never start another entrance animation.
-      cards.forEach(mark);
-      if (!play) return;
       const bounds = element.getBoundingClientRect();
-      cards.filter(card => {
-        const rect = card.getBoundingClientRect();
-        return rect.right > bounds.left + 1 && rect.left < bounds.right - 1;
-      }).sort((a, b) => a.getBoundingClientRect().left - b.getBoundingClientRect().left)
-        .forEach((card, index) => animate(card, 'card', Math.min(index, 2) * 60, opacity));
-    } else if (play) animate(element, kind, delay, opacity);
+      // Snapshot geometry before creating any animations, avoiding interleaved
+      // style writes/measurements and repeated rect reads inside the sort.
+      const visible = cards.map(card => ({element: card, bounds: card.getBoundingClientRect()}))
+        .filter(card => card.bounds.right > bounds.left + 1 && card.bounds.left < bounds.right - 1)
+        .sort((a, b) => a.bounds.left - b.bounds.left);
+      return {members: cards, targets: visible.map((card, index) => ({element: card.element, kind: 'card', delay: Math.min(index, 2) * 60}))};
+    }
+    return {members: [], targets: [{element, kind, delay}]};
+  }
+
+  function cancelPrepared(record) {
+    const batch = prepared.get(record.element);
+    if (!batch) return;
+    prepared.delete(record.element);
+    batch.effects.forEach(({element, animation}) => {
+      animation.cancel();
+      if (!seen.has(element)) delete element.dataset.revealState;
+    });
+    if (!seen.has(record.element)) record.element.dataset.revealState = 'pending';
+    releaseObserver?.unobserve(record.element);
+    preparationObserver?.observe(record.element);
+  }
+
+  function cancelPreparations() {
+    records.forEach(cancelPrepared);
+  }
+
+  function settle(record) {
+    if (seen.has(record.element)) return;
+    cancelPrepared(record);
+    const batch = plan(record);
+    mark(record.element);
+    batch.members.forEach(mark);
+  }
+
+  function prepare(record, bounds, delay = record.delay) {
+    if (seen.has(record.element) || prepared.has(record.element) || motion.matches || document.hidden || performance.now() < skipUntil) return;
+    // The above-screen gap also covers the largest vertical offset (28px),
+    // so preparing a reverse entrance cannot paint pixels into the viewport.
+    const below = bounds.top >= window.innerHeight && bounds.top < window.innerHeight + 240;
+    const above = bounds.bottom <= -32 && bounds.bottom > -240;
+    if (!below && !above) return;
+    const batch = {...plan(record, delay), effects: []};
+    prepared.set(record.element, batch);
+    try {
+      for (const target of batch.targets) {
+        const animation = createAnimation(target.element, target.kind, target.delay, below ? 1 : -1);
+        batch.effects.push({element: target.element, animation});
+        target.element.dataset.revealState = 'prepared';
+      }
+      record.element.dataset.revealState = 'prepared';
+      // Staging changes this element's bounds. A larger release band gives
+      // enough hysteresis that its own offset cannot undo the preparation.
+      preparationObserver.unobserve(record.element);
+      releaseObserver.observe(record.element);
+    } catch {
+      // A rejected pause/animation must leave the whole group naturally visible.
+      settle(record);
+    }
+  }
+
+  function play(record) {
+    const batch = prepared.get(record.element);
+    if (!batch) {
+      // It is already painted: starting from a fresh offset would move it
+      // backwards in one frame. Late observer delivery simply keeps it still.
+      settle(record);
+      return;
+    }
+    prepared.delete(record.element);
+    mark(record.element);
+    // Mark the complete original set before playing either child/card. Moving
+    // nodes around the infinite catalogue must never restart their entrances.
+    batch.members.forEach(mark);
+    for (const {element, animation} of batch.effects) {
+      active.set(element, animation);
+      element.dataset.revealState = 'running';
+      const release = () => { if (active.get(element) === animation) finish(element); };
+      animation.finished.then(release, release);
+      try { animation.play(); } catch { finish(element); }
+    }
   }
 
   function finishActive() {
@@ -108,7 +179,7 @@ export function initReveals() {
   }
 
   function settleAll() {
-    records.forEach(record => enter(record, false));
+    records.forEach(settle);
     finishActive();
   }
 
@@ -124,6 +195,7 @@ export function initReveals() {
     // on screen finish naturally rather than snapping to their final frame.
     if (sampleDistance > window.innerHeight * .75 || distance > window.innerHeight * .85) {
       skipUntil = now + 220;
+      cancelPreparations();
     }
     lastY = window.scrollY;
   }
@@ -135,7 +207,7 @@ export function initReveals() {
     // Only an actual control needs its effect settled before pointer input.
     if (event.type === 'pointerdown' && !target.closest?.('a, button, input, select, textarea, summary')) return;
     records.forEach(record => {
-      if (record.element === target || record.element.contains(target)) enter(record, false);
+      if (record.element === target || record.element.contains(target)) settle(record);
     });
     Array.from(active.keys()).forEach(element => {
       if (element === target || element.contains(target)) finish(element);
@@ -144,6 +216,7 @@ export function initReveals() {
 
   function revealAnchor() {
     skipUntil = performance.now() + 900;
+    cancelPreparations();
     finishActive();
     let anchor;
     try {
@@ -154,31 +227,39 @@ export function initReveals() {
         // #top belongs to the main wrapper. Treating all its descendants as
         // the target would consume every still-unvisited section entrance.
         const bounds = record.element.getBoundingClientRect();
-        if (record.element.closest('.hero') || (bounds.top < window.innerHeight && bounds.bottom > 0)) enter(record, false);
-      } else if (anchor === record.element || anchor.contains(record.element) || record.element.contains(anchor)) enter(record, false);
+        if (record.element.closest('.hero') || (bounds.top < window.innerHeight && bounds.bottom > 0)) settle(record);
+      } else if (anchor === record.element || anchor.contains(record.element) || record.element.contains(anchor)) settle(record);
     });
   }
 
   function onLink(event) {
     if (event.target.closest?.('a[href^="#"]')) {
       skipUntil = performance.now() + 900;
+      cancelPreparations();
       finishActive();
     }
   }
 
   function onVisibility() {
-    if (document.hidden) finishActive();
+    if (document.hidden) {
+      cancelPreparations();
+      finishActive();
+    }
   }
 
   function onMotion(event) {
     if (event.matches) {
       observer?.disconnect();
+      preparationObserver?.disconnect();
+      releaseObserver?.disconnect();
       settleAll();
     }
   }
 
   function dispose() {
     observer?.disconnect();
+    preparationObserver?.disconnect();
+    releaseObserver?.disconnect();
     settleAll();
     window.removeEventListener('scroll', onScroll);
     window.removeEventListener('hashchange', revealAnchor);
@@ -196,33 +277,50 @@ export function initReveals() {
 
   try {
     observer = new IntersectionObserver(entries => {
-      const counts = new Map();
-      entries.filter(entry => entry.isIntersecting)
-        .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top || a.boundingClientRect.left - b.boundingClientRect.left)
-        .forEach(entry => {
-          const record = records.get(entry.target);
-          if (!record || seen.has(record.element)) return;
+      // Read all current bounds before playing/cancelling any effects. The
+      // observer's queued bounds may describe an earlier scroll position.
+      const incoming = entries.filter(entry => entry.isIntersecting)
+        .map(entry => ({record: records.get(entry.target), bounds: entry.target.getBoundingClientRect()}))
+        .filter(({record}) => record && !seen.has(record.element))
+        .sort((a, b) => a.bounds.top - b.bounds.top || a.bounds.left - b.bounds.left);
+      incoming.forEach(({record, bounds}) => {
           if (motion.matches) {
-            enter(record, false);
+            settle(record);
             return;
           }
           // A native anchor jump may cross several sections on its way to
           // the target. Skipping that transit must not count as a first visit:
           // keep the natural content visible and observe its next real entry.
-          const bounds = record.element.getBoundingClientRect();
-          if (document.hidden || performance.now() < skipUntil || bounds.bottom <= 0) return;
+          if (document.hidden || performance.now() < skipUntil) {
+            cancelPrepared(record);
+            return;
+          }
+          if (bounds.bottom <= 0 || bounds.top >= window.innerHeight) return;
+          play(record);
+        });
+    }, {rootMargin: '0px', threshold: .00001});
+
+    preparationObserver = new IntersectionObserver(entries => {
+      const counts = new Map();
+      const batches = entries.map(entry => ({entry, record: records.get(entry.target), bounds: entry.target.getBoundingClientRect()}))
+        .sort((a, b) => a.bounds.top - b.bounds.top || a.bounds.left - b.bounds.left);
+      for (const {entry, record, bounds} of batches) {
+        if (!record || seen.has(record.element)) continue;
+        if (entry.isIntersecting) {
           const grouped = record.kind === 'card' || record.kind === 'row';
           const count = counts.get(record.kind) || 0;
           if (grouped) counts.set(record.kind, count + 1);
-          const delay = grouped ? Math.min(record.delay + count * 60, 120) : record.delay;
-          // Start at the actual viewport, so a slow scroll cannot consume the
-          // whole effect offscreen. Entries from either edge can move without
-          // hiding any content that has already been painted.
-          const edge = (bounds.top >= window.innerHeight - 96 && bounds.top < window.innerHeight)
-            || (bounds.bottom > 0 && bounds.bottom <= 96);
-          enter(record, true, delay, edge ? .5 : 1);
-        });
-    }, {rootMargin: '0px', threshold: 0});
+          prepare(record, bounds, grouped ? Math.min(record.delay + count * 60, 120) : record.delay);
+        }
+      }
+    }, {rootMargin: '240px 0px', threshold: .00001});
+
+    releaseObserver = new IntersectionObserver(entries => {
+      for (const entry of entries) {
+        const record = records.get(entry.target);
+        if (record && !entry.isIntersecting) cancelPrepared(record);
+      }
+    }, {rootMargin: '320px 0px', threshold: .00001});
 
     records.forEach(record => {
       const bounds = record.element.getBoundingClientRect();
@@ -230,11 +328,12 @@ export function initReveals() {
       // section above a deep-link viewport may still be unvisited: observe it
       // so scrolling back up can show its first entrance.
       if (record.element.closest('.hero') || (bounds.top < window.innerHeight && bounds.bottom > 0)) {
-        enter(record, false);
+        settle(record);
       }
       else {
         record.element.dataset.revealState = 'pending';
         observer.observe(record.element);
+        preparationObserver.observe(record.element);
       }
     });
     window.addEventListener('scroll', onScroll, {passive: true});
