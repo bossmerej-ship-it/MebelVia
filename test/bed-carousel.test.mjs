@@ -12,6 +12,7 @@ function fixture({ names = models, width = 354, cardWidth = width * .88, gap = 1
   const document = new EventTarget();
   document.activeElement = null;
   const frames = new Map(), timers = new Map(), requests = [];
+  const measures = {bounds: 0, styles: 0, rotations: 0};
   let token = 0, resized;
   class Element extends EventTarget {
     classes = new Set();
@@ -25,6 +26,7 @@ function fixture({ names = models, width = 354, cardWidth = width * .88, gap = 1
     card.id = id;
     card.button = new Element();
     card.getBoundingClientRect = () => {
+      measures.bounds++;
       const left = children.indexOf(card) * (cardWidth + gap) - scrollLeft;
       return { left, right: left + cardWidth, width: cardWidth };
     };
@@ -43,6 +45,7 @@ function fixture({ names = models, width = 354, cardWidth = width * .88, gap = 1
   track.contains = element => element === track || children.some(card => card.contains(element));
   track.getBoundingClientRect = () => ({ left: 0, right: track.clientWidth, width: track.clientWidth });
   function relocate(card, before) {
+    measures.rotations++;
     if (card.contains(document.activeElement)) document.activeElement = null;
     children.splice(children.indexOf(card), 1);
     if (before) children.unshift(card); else children.push(card);
@@ -61,7 +64,7 @@ function fixture({ names = models, width = 354, cardWidth = width * .88, gap = 1
   vm.runInNewContext(`${source}\ninitBedCarousel();`, {
     document,
     matchMedia: () => ({ matches: reduced }),
-    getComputedStyle: () => ({ columnGap: String(gap) }),
+    getComputedStyle: () => { measures.styles++; return { columnGap: String(gap) }; },
     requestAnimationFrame: callback => { frames.set(++token, callback); return token; },
     cancelAnimationFrame: id => frames.delete(id),
     setTimeout: callback => { timers.set(++token, callback); return token; },
@@ -103,7 +106,7 @@ function fixture({ names = models, width = 354, cardWidth = width * .88, gap = 1
   }
   flushFrames();
   return {
-    track, originals, document, requests, first, visible, settle, move, event, nativeScroll,
+    track, originals, document, requests, measures, first, visible, settle, move, event, nativeScroll,
     step: () => cardWidth + gap,
     resize(newWidth, newCardWidth) { track.clientWidth = newWidth; cardWidth = newCardWidth; resized(); settle(); }
   };
@@ -213,6 +216,40 @@ test('horizontal wheel continues through both joins without waiting for scrollen
   assert.equal(f.first(), 'violetta');
   assert.deepEqual(new Set(f.track.children), new Set(f.originals));
   f.settle();
+});
+
+test('a stream of small wheel events reuses geometry across a card rotation', () => {
+  const f = fixture({cardWidth: 300});
+  const before = {...f.measures};
+  const requests = f.requests.length;
+  for (let i = 0; i < 120; i++) {
+    f.event('wheel', {deltaX: 4, deltaY: 0});
+  }
+  assert.equal(f.measures.bounds, before.bounds, 'scroll input must not remeasure fixed card columns');
+  assert.equal(f.measures.styles, before.styles, 'scroll input must not recalculate the fixed grid gap');
+  assert.equal(f.measures.rotations - before.rotations, 1, 'the stream exercises actual recycling');
+  assert.equal(f.requests.length - requests, 120, 'every input is still applied synchronously');
+  assert.equal(f.first(), 'hanna');
+  const stopped = visibleGeometry(f);
+  f.settle();
+  assertSameGeometry(visibleGeometry(f), stopped, 'cached geometry must preserve an unsnapped stop');
+});
+
+test('responsive width changes refresh geometry once before further wheel input', () => {
+  const f = fixture();
+  f.event('wheel', {deltaX: f.step() * 1.41, deltaY: 0});
+  f.settle();
+  const selected = f.first();
+  const before = {...f.measures};
+  f.resize(1000, 300);
+  assert.equal(f.measures.bounds, before.bounds + 1, 'one resize measures the new card width once');
+  assert.equal(f.measures.styles, before.styles + 1, 'one resize measures the new gap once');
+  assert.equal(f.first(), selected, 'the current bed survives the metric change');
+  const refreshed = {...f.measures};
+  for (let i = 0; i < 120; i++) f.event('wheel', {deltaX: -4, deltaY: 0});
+  assert.equal(f.measures.bounds, refreshed.bounds);
+  assert.equal(f.measures.styles, refreshed.styles);
+  assert.deepEqual(new Set(f.track.children), new Set(f.originals));
 });
 
 test('one oversized wheel event consumes complete cycles without losing its remainder to clamping', () => {

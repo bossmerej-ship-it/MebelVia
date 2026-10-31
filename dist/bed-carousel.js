@@ -14,9 +14,24 @@ export function initBedCarousel() {
   let layoutWidth = track.clientWidth;
   let anchor;
   let anchorOffset = 0;
+  let geometry;
 
-  const limit = () => Math.max(0, track.scrollWidth - track.clientWidth);
-  const stride = () => track.firstElementChild ? track.firstElementChild.getBoundingClientRect().width + (parseFloat(getComputedStyle(track).columnGap) || 0) : 0;
+  function measureGeometry(width = track.clientWidth) {
+    const card = track.firstElementChild;
+    const gap = card ? parseFloat(getComputedStyle(track).columnGap) || 0 : 0;
+    const step = card ? card.getBoundingClientRect().width + gap : 0;
+    geometry = {
+      step,
+      visible: step ? Math.ceil((width + gap - 1) / step) : 0,
+      limit: Math.max(0, track.scrollWidth - width)
+    };
+  }
+  // Fixed grid columns do not change when original cards are recycled. Read
+  // their geometry together at initialization and on actual width changes,
+  // rather than alternating style/layout reads with every wheel scrollTo.
+  measureGeometry(layoutWidth);
+  const limit = () => geometry.limit;
+  const stride = () => geometry.step;
 
   // Keep real cards on either side of the viewport. Moving existing nodes
   // preserves their photo handlers and the product dialog's return target.
@@ -43,8 +58,7 @@ export function initBedCarousel() {
     const focus = document.activeElement;
     // Tab navigation must be able to leave the finite set of real cards.
     if (!recycleFocused && focus !== track && track.contains(focus)) return;
-    const visible = Math.ceil((track.clientWidth + (parseFloat(getComputedStyle(track).columnGap) || 0) - 1) / step);
-    const buffer = Math.floor((track.children.length - visible) / 2);
+    const buffer = Math.floor((track.children.length - geometry.visible) / 2);
     if (buffer < 1) return;
     const shift = buffer - Math.floor((position + 1) / step);
     if (!shift && Math.abs(position - track.scrollLeft) < .01) return;
@@ -158,7 +172,7 @@ export function initBedCarousel() {
     clearTimeout(wheelTimer);
     moving = nativeGesture = pointerActive = false;
     wheelScrolling = true;
-    const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? track.clientWidth : 1;
+    const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? layoutWidth : 1;
     // Apply the complete delta in cyclic coordinates, even when one event
     // travels several full catalogues. Native scrollLeft would clamp it.
     recenter(true, track.scrollLeft + horizontal * unit);
@@ -170,14 +184,16 @@ export function initBedCarousel() {
     }, 160);
   }, {passive: false});
   new ResizeObserver(() => {
-    if (layoutWidth !== track.clientWidth) {
+    const width = track.clientWidth;
+    if (layoutWidth !== width) {
       clearTimeout(scrollTimer);
       clearTimeout(wheelTimer);
       wheelScrolling = nativeGesture = pointerActive = false;
       moving = false;
+      measureGeometry(width);
       const index = Array.from(track.children).indexOf(anchor);
       if (index >= 0) jump((index + anchorOffset) * stride());
-      layoutWidth = track.clientWidth;
+      layoutWidth = width;
     }
     syncPosition();
   }).observe(track);
