@@ -89,6 +89,17 @@ test('the mattress and bedding lift as one assembly while the upholstered shell 
   assert.ok(degrees >= 35 && degrees <= 45, `opening angle ${degrees}`);
 });
 
+test('fabric exports retain restrained fibre sheen instead of a full white coating', () => {
+  const fabrics = gltf.materials.filter(material => material.extras?.fabric);
+  assert.ok(fabrics.length >= 5);
+  for (const material of fabrics) {
+    const sheen = material.extensions?.KHR_materials_sheen?.sheenColorFactor;
+    assert.ok(sheen?.length === 3, `${material.name} must retain its fabric sheen`);
+    assert.ok(sheen.every(value => value >= 0 && value <= .35), `${material.name} must not export full-intensity sheen`);
+    assert.equal(material.pbrMetallicRoughness.metallicFactor, 0);
+  }
+});
+
 test('exported arms and telescopic struts stay attached throughout the lift, including between keyframes', () => {
   for (let sample = 0; sample <= 160; sample++) {
     pose(sample / 160);

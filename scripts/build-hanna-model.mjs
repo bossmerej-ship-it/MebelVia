@@ -16,6 +16,7 @@ import {GLTFExporter} from 'three/addons/exporters/GLTFExporter.js';
 import {PNG} from 'pngjs';
 import {MeshBVH} from 'three-mesh-bvh';
 import {createHannaOrganicPillows} from './hanna-pillows.mjs';
+import {finishHannaClothPieces} from './hanna-cloth-finish.mjs';
 
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'..');
 const out=resolve(root,'dist/assets/models');
@@ -30,8 +31,11 @@ const mechanism=new THREE.Group();mechanism.name='LiftMechanism';scene.add(mecha
 const buckets=new Map();
 
 function fabric(name,color,key,roughness=.96){
+  // GLTFExporter writes sheenColor directly; a separate .sheen multiplier is
+  // not retained. Put the intended low fibre sheen into the exported colour.
+  const sheen=key==='velvet'?.18:key==='stripe'?.07:.10;
   const m=new THREE.MeshPhysicalMaterial({name,color,roughness,metalness:0,side:THREE.DoubleSide,vertexColors:true,
-    specularIntensity:.24,ior:1.46,sheen:.30,sheenRoughness:1,sheenColor:color});
+    specularIntensity:.18,ior:1.46,sheen:1,sheenRoughness:1,sheenColor:new THREE.Color(color).multiplyScalar(sheen)});
   m.userData={fabric:key};return m;
 }
 const velvet=fabric('Ivory velour',0xffffff,'velvet');
@@ -101,7 +105,8 @@ function subdivideUpholsteryFaces(geometry){
 function box(parent,size,pos,mat,r=.02,rot=[0,0,0],scale=1){
   const radius=Math.min(r,...size.map(v=>v/2));
   let g=new RoundedBoxGeometry(...size,mat===velvet?7:3,radius);
-  if(mat===velvet)g=subdivideUpholsteryFaces(g);
+  const fittedTicking=mat===mattressMat&&size[1]>.1;
+  if(mat===velvet||fittedTicking)g=subdivideUpholsteryFaces(g);
   // Physical textile coordinates keep the grain tiny and consistent across pieces.
   if(mat.userData.fabric&&mat.userData.fabric!=='stripe'){
     const p=g.attributes.position,n=g.attributes.normal,uv=g.attributes.uv;
@@ -118,11 +123,22 @@ function box(parent,size,pos,mat,r=.02,rot=[0,0,0],scale=1){
         const padding=n.getZ(i)>.6&&(footPanel||headPanel)?(footPanel?.010:.006)*Math.max(0,fade)**.8*(.9+.1*Math.sin(4*x+3*y)):0;
         const warp=padding+fade*(.00065*Math.sin(12*x+4*y)+.00045*Math.cos(19*y-7*x)+.0003*Math.sin(29*x+17*y));
         p.setXYZ(i,x+n.getX(i)*warp,y+n.getY(i)*warp,z+n.getZ(i)*warp);
+      }else if(fittedTicking&&n.getZ(i)>.5){
+        // A fitted fabric face has shallow, unequal tension gathers; it is
+        // not the perfectly planar front of a solid foam or plastic block.
+        const x=p.getX(i),y=p.getY(i),z=p.getZ(i);
+        const bell=(value,centre,width)=>Math.exp(-(((value-centre)/width)**2));
+        const fade=Math.sin(Math.PI*clamp(x/(size[0]-2*radius)+.5))*Math.sin(Math.PI*clamp(y/(size[1]-2*radius)+.5));
+        const pull=.0018*bell(x+.7*y,-.60,.035)*bell(y,.018,.08)
+          +.0013*bell(x-.4*y,.57,.048)*bell(y,-.005,.075);
+        const crown=.004+.0028*bell(x,-.27,.30)*bell(y,.014,.085)+.0018*bell(x,.38,.22)*bell(y,-.018,.08);
+        const warp=Math.max(0,fade)*(crown-pull)*smooth((n.getZ(i)-.5)/.5);
+        p.setXYZ(i,x+n.getX(i)*warp,y+n.getY(i)*warp,z+n.getZ(i)*warp);
       }
     }
     // Reconcile geometric normals across duplicated UV vertices. Computing
     // each expanded triangle separately would turn the upholstery into facets.
-    if(mat===velvet)smoothPositionNormals(g);
+    if(mat===velvet||fittedTicking)smoothPositionNormals(g);
   }
   add(parent,g,mat,pos,rot,scale);
 }
@@ -194,7 +210,7 @@ tube(upper,[[-.07,.367,.98],[-.07,.353,1.035],[.07,.353,1.035],[.07,.367,.98]].m
 // Offline cloth simulation settles the loose fabric against the mattress.
 // Cache coordinates are the closed bed's world axes; all textile meshes then
 // attach to the unchanged rigid platform for the existing lift animation.
-const cloth=JSON.parse(gunzipSync(await readFile(resolve(root,'scripts/materials/hanna-cloth.json.gz'))));
+const cloth=finishHannaClothPieces(JSON.parse(gunzipSync(await readFile(resolve(root,'scripts/materials/hanna-cloth.json.gz')))));
 function remapSeam(value,source,target){
   for(let i=1;i<source.length;i++)if(value<=source[i])return THREE.MathUtils.lerp(target[i-1],target[i],clamp((value-source[i-1])/(source[i]-source[i-1])));
   return 1;
@@ -349,7 +365,7 @@ function texturePng(kind){
     const h=Math.sin(x*12.9898+y*78.233)*43758.5453,noise=(h-Math.floor(h)-.5);
     let value=247+noise*3+(x%2?1:-1)+(y%2?.5:-.5);
     if(kind==='stripe'){
-      const stripe=(x/size*25)%1;
+      const stripe=(x/size*40)%1;
       if(stripe>.39&&stripe<.50)value=80+noise*8;
       else if((stripe>.35&&stripe<.37)||(stripe>.52&&stripe<.54))value=130+noise*6;
       else value=246+noise*3;

@@ -68,3 +68,14 @@ Hanna's padded front faces contain interior vertices, allowing a shallow filled
 upholstery crown without changing their outline. Bedding retains a visible
 white mattress band below the shorter central quilt hem; its side drapes remain
 free. Pillowcase folds are shallow and short rather than deep carved channels.
+
+`hanna-cloth-finish.mjs` refines the checked-in gravity cache without changing
+the lift rig: local soft quilt slack, a thin manifold turned edge and seated
+striped linen. Its UV-paired fabric faces move together, preserving fold thickness
+and the longer left drape. The original simulated cache stays unchanged.
+White pillowcases have thin loose corner flaps and a gentle backward lean;
+the small taupe case follows the actual curved white surfaces rather than a
+global support plane. The fitted mattress face has subtle unequal tension folds.
+Low fibre sheen is encoded in `sheenColor` itself because the GLTF exporter
+does not preserve the separate Three.js sheen multiplier. Geometry/contact and
+export regression tests run with `npm test`.

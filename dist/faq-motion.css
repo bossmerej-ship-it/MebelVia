@@ -1,0 +1,5 @@
+@layer components {
+  .faq details[data-faq-motion="closing"] summary span {
+    transform: rotate(0deg);
+  }
+}

@@ -9,6 +9,8 @@ const TAU=Math.PI*2;
 const clamp=(x,a=0,b=1)=>Math.max(a,Math.min(b,x));
 const bell=(x,w)=>Math.exp(-((x/w)**2));
 const softMax=(x,min,k=.002)=>min+k*Math.log1p(Math.exp((x-min)/k));
+const softMin=(x,max,k=.002)=>-softMax(-x,-max,k);
+const smooth=x=>{x=clamp(x);return x*x*(3-2*x);};
 
 function casingFolds(seed){
   // Unequal fans entering from compressed hems, with no repeating full-face wave.
@@ -22,7 +24,7 @@ function casingFolds(seed){
       slope:direction*(.10+.09*finger)+.08*Math.sin(seed+n*2.1),
       reach:.28+.20*(.5+.5*Math.sin(seed+n*1.7)),
       width:.032+.018*(.5+.5*Math.cos(seed+n*.9)),
-      depth:.005+.004*(.5+.5*Math.sin(seed+n*2.6))});
+      depth:.003+.003*(.5+.5*Math.sin(seed+n*2.6))});
   }
   return folds;
 }
@@ -56,21 +58,32 @@ function makeSoftCase(setting,whiteSupport){
   const positions=[],uvs=[],indices=[],rim=[],outer=[];
   function point(radial,angle,side){
     const ct=Math.cos(angle),st=Math.sin(angle);
-    const denominator=(Math.abs(ct)**10+Math.abs(st)**10)**(1/10);
+    const denominator=(Math.abs(ct)**8+Math.abs(st)**8)**(1/8);
     const u=radial*ct/denominator,v=radial*st/denominator;
     // A broad supported body ends in a narrow, empty fabric flange.
     let x=a*u,y=b*v;
     const edge=radial**4;
     const loose=1+.50*(setting.organic.outline(angle,1/denominator)-1)*edge;
     x*=loose;y*=loose;
+    // A pillowcase is cut as a rectangle: its unfilled corner tips extend
+    // past the round filling and curl softly towards the headboard. Keep
+    // that movement in the loose hem instead of inflating a square pad.
+    const corner=material==='white'?Math.abs(2*ct*st)**4*radial**8:0;
+    const flare=.08*corner*smooth((radial-.86)/.125);
+    x*=1+flare;y*=1+flare;
     x+=edge*u*(.009*bell(v+.42,.23)-.006*bell(v-.56,.18));
     y+=edge*(.014*bell(u+.60,.16)-.009*bell(u-.15,.21)+.010*bell(u-.72,.18))
       +.003*u*Math.sin(seed);
-    const filledRadius=clamp(radial/.955);
-    const filling=(1-filledRadius**2.7)**.53;
-    const broad=.012*bell(u+.38,.44)*bell(v-.20,.56)
-      +.009*bell(u-.42,.38)*bell(v+.29,.43)
-      -.010*bell(u-.05,.53)*bell(v+.07,.37);
+    // Keep the relaxed inner tips close without pushing the two independent
+    // white cases through each other. The soft limit leaves the filling intact.
+    if(material==='white')x=Math.sign(x)*softMin(Math.abs(x),a*.98,.0015);
+    // Ease the filling into a narrow empty hem instead of ending a vertical
+    // inflated shoulder abruptly against a flat ring of fabric.
+    const filledRadius=clamp(radial/.985);
+    const filling=(1-filledRadius**3)**.62*(1-smooth((radial-.86)/.125));
+    const broad=.008*bell(u+.38,.44)*bell(v-.20,.56)
+      +.006*bell(u-.42,.38)*bell(v+.29,.43)
+      -.006*bell(u-.05,.53)*bell(v+.07,.37);
     let creases=0;
     for(const f of folds){
       const d=f.edge==='left'?u+1:f.edge==='right'?1-u:f.edge==='top'?1-v:v+1;
@@ -85,7 +98,8 @@ function makeSoftCase(setting,whiteSupport){
     const oldDepth=setting.organic.depth(u*loose,v*loose,side);
     const organic=oldDepth===null?0:clamp(.32*c*(oldDepth-side*.96*filling),-.012,.012)*clamp((1-radial)/.16);
     const diagonal=-.0048*bell(u+.60*v+.30,.065)*bell(v-.26,.36)+.0032*bell(u+.60*v+.23,.12)*bell(v-.25,.40);
-    let z=side*(c*.96*filling+broad*filling+creases*filling*(side>0?1:.45)+diagonal*filling+casingThickness)+organic+flange;
+    const turnedTip=-.010*corner*smooth((radial-.90)/.10)*(1+.10*Math.sin(seed+3*angle));
+    let z=side*(c*.96*filling+broad*filling+creases*filling*(side>0?1:.45)+diagonal*filling+casingThickness)+organic+flange+turnedTip;
     // Gentle lean keeps the upper edge relaxed without a tilted, hard sculpt.
     z-=setting.lean*y;
     const world=[centre[0]+x,softMax(centre[1]+y,.634,.003),centre[2]+z];
@@ -128,20 +142,23 @@ export function createHannaOrganicPillows(){
   const source=JSON.parse(gunzipSync(readFileSync(new URL('./materials/bed-cloth.json.gz',import.meta.url)))).filter(piece=>piece.material==='pillow');
   const organic=source.slice(0,3).map(organicField);
   const whites=[
-    {name:'HannaSoftWhiteLeft',material:'white',size:[.77,.380,.300],centre:[-.405,.810,-.710],seed:1.35,lean:.08},
-    {name:'HannaSoftWhiteRight',material:'white',size:[.77,.380,.300],centre:[.405,.812,-.708],seed:3.1,lean:.07}
+    {name:'HannaSoftWhiteLeft',material:'white',size:[.82,.320,.210],centre:[-.405,.794,-.790],seed:1.35,lean:.22},
+    {name:'HannaSoftWhiteRight',material:'white',size:[.82,.320,.210],centre:[.405,.796,-.788],seed:3.1,lean:.22}
   ].flatMap((setting,i)=>makeSoftCase({...setting,organic:organic[i]}));
   const supports=whites.filter(piece=>!piece.name.endsWith('SoftHem')).map(piece=>new MeshBVH(piece.geometry));
-  const frontPlane=Math.max(...whites.map(piece=>piece.geometry.boundingBox.max.z));
   const ray=new THREE.Ray(new THREE.Vector3(),new THREE.Vector3(0,0,-1));
   function whiteSupport(x,y){
     ray.origin.set(x,y,.10);let z=null;
     for(const bvh of supports){const hit=bvh.raycastFirst(ray,THREE.DoubleSide);if(hit)z=Math.max(z??-Infinity,.10-hit.distance);}
-    // The hidden rear of the small case compresses against a broad support
-    // plane; it cannot bridge into either white case between contact samples.
-    return Math.max(z??-Infinity,frontPlane);
+    // Contact follows the actual curved case. A global front plane would
+    // flatten the small pillow's rear and leave centimetres of empty air
+    // between the two surfaces, especially beside the central gap.
+    return z;
   }
-  const taupe=makeSoftCase({name:'HannaSoftTaupe',material:'taupe',size:[.57,.33,.255],centre:[.012,.799,-.498],seed:2.2,lean:.025,organic:organic[2]},whiteSupport);
+  // Position the accent relative to the moved white cases, while its rear
+  // still compresses point by point against their real curved surfaces.
+  const accentZ=Math.max(...whites.map(piece=>piece.geometry.boundingBox.max.z))+.025;
+  const taupe=makeSoftCase({name:'HannaSoftTaupe',material:'taupe',size:[.60,.235,.160],centre:[.012,.783,accentZ],seed:2.2,lean:.06,organic:organic[2]},whiteSupport);
   return [...whites,...taupe];
 }
 
