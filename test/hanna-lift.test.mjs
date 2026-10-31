@@ -45,9 +45,10 @@ function fixture(reduced = false, options = {}) {
   }
   const section = new Element(), viewer = new Element(), photo = new Element();
   const sticky = { clientHeight: 1000, getBoundingClientRect: () => ({top:0,bottom:1000}) };
+  const visual = {getBoundingClientRect: () => ({top:options.visualTop ?? 0,bottom:options.visualBottom ?? 1000})};
   section.dataset.liftState = 'photo';
   section.top = options.sectionTop ?? 0;
-  section.querySelector = selector => ({ '#hanna-bed': viewer, '.collection-image': photo, '.collection-sticky': sticky })[selector];
+  section.querySelector = selector => ({ '#hanna-bed': viewer, '.collection-image': photo, '.collection-sticky': sticky, '.collection-visual': visual })[selector];
   viewer.dataset.src = 'assets/models/hanna.glb';
   viewer.availableAnimations = ['Lift'];
   viewer.duration = 1;
@@ -190,6 +191,13 @@ test('background loads wait for visibility and current scene intersection', () =
   leave.waitForVisit();
   assert.equal(leave.viewer.getAttribute('src'), null);
   assert.equal(leave.timers.size, 0);
+});
+
+test('a mobile heading in view cannot trigger a still-offscreen 3D canvas', () => {
+  const f = fixture(false, {visualTop:1200,visualBottom:1800});
+  f.near(true);
+  assert.equal(f.viewer.getAttribute('src'), null, 'recheck the visual bounds after the dwell, not the sticky text');
+  assert.equal(f.section.dataset.liftState, 'photo');
 });
 
 test('a missing response times out without activating a tall scroll section', () => {

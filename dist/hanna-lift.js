@@ -12,6 +12,7 @@ export function initHannaLift() {
   if (!viewer) return;
 
   const sticky = section.querySelector('.collection-sticky');
+  const visual = section.querySelector('.collection-visual') || sticky;
   const photo = section.querySelector('.collection-image');
   const motion = matchMedia('(prefers-reduced-motion: reduce)');
   let requested = false;
@@ -234,7 +235,7 @@ export function initHannaLift() {
     // start GLB decoding and shader compilation. Load only after a brief,
     // sustained visit to the real sticky viewport, never a large preload area.
     loadDelay = setTimeout(() => {
-      const bounds = sticky.getBoundingClientRect();
+      const bounds = visual.getBoundingClientRect();
       if (bounds.top < window.innerHeight && bounds.bottom > 0) requestModel();
     }, 160);
   }
@@ -274,7 +275,7 @@ export function initHannaLift() {
         cancelFrame();
       }
     }, { rootMargin: '0px', threshold: 0 });
-    observer.observe(sticky);
+    observer.observe(visual);
   } else {
     near = true;
     queueModel();
