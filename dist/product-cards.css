@@ -22,9 +22,8 @@
   }
 
   #mattress-grid :is(.product-photo, .product-secondary) {
-    padding: 0;
-    max-width: calc(100% - 44px);
-    max-height: calc(100% - 44px);
+    object-fit: contain;
+    padding: clamp(12px, 1.2vw, 18px);
   }
 
   :is(#bed-grid, #mattress-grid) .product-info {
