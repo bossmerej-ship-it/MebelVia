@@ -47,21 +47,20 @@ export function initReveals() {
     element.dataset.revealState = 'done';
   }
 
-  function animate(element, kind, delay) {
+  function animate(element, kind, delay, opacity = 1) {
     const horizontal = kind === 'delivery-copy' || kind === 'delivery-truck';
-    const distance = kind === 'action' || kind === 'row' ? 12 : 16;
-    const offset = horizontal ? `${kind === 'delivery-copy' ? -24 : 24}px 0` : `0 ${distance}px`;
-    // Observer delivery happens after a frame has been painted. Move the
-    // incoming element gently without making already readable content fade
-    // out first. Nothing is hidden while waiting for the observer.
-    const from = {opacity: 1, translate: offset};
+    const distance = kind === 'action' || kind === 'row' ? 18 : kind === 'card' ? 28 : 24;
+    const offset = horizontal ? `${kind === 'delivery-copy' ? -44 : 44}px 0` : `0 ${distance}px`;
+    // Only a genuinely incoming edge may fade. Late callbacks retain full
+    // opacity, so readable text cannot disappear before its entrance plays.
+    const from = {opacity, translate: offset};
     const to = {opacity: 1, translate: '0 0'};
     try {
       // Individual translate composes with the existing card hover transform.
       const animation = element.animate([from, to], {
-        duration: kind === 'action' ? 500 : 600,
-        delay: Math.min(delay, 140),
-        easing: 'cubic-bezier(.22,1,.36,1)',
+        duration: kind === 'action' || kind === 'row' ? 650 : 700,
+        delay: Math.min(delay, 120),
+        easing: 'cubic-bezier(.22,.68,.28,1)',
         fill: 'backwards'
       });
       active.set(element, animation);
@@ -75,7 +74,7 @@ export function initReveals() {
     }
   }
 
-  function enter(record, play, delay = record.delay) {
+  function enter(record, play, delay = record.delay, opacity = 1) {
     const {element, kind} = record;
     if (seen.has(element)) return;
     mark(element);
@@ -86,8 +85,8 @@ export function initReveals() {
       // reduced motion, failed animation or revisiting never hides either.
       [copy, truck].filter(Boolean).forEach(mark);
       if (play) {
-        if (copy) animate(copy, 'delivery-copy', 0);
-        if (truck) animate(truck, 'delivery-truck', 0);
+        if (copy) animate(copy, 'delivery-copy', 0, opacity);
+        if (truck) animate(truck, 'delivery-truck', 0, opacity);
       }
     } else if (kind === 'bed-list') {
       const cards = Array.from(element.children);
@@ -100,8 +99,8 @@ export function initReveals() {
         const rect = card.getBoundingClientRect();
         return rect.right > bounds.left + 1 && rect.left < bounds.right - 1;
       }).sort((a, b) => a.getBoundingClientRect().left - b.getBoundingClientRect().left)
-        .forEach((card, index) => animate(card, 'card', Math.min(index, 2) * 70));
-    } else if (play) animate(element, kind, delay);
+        .forEach((card, index) => animate(card, 'card', Math.min(index, 2) * 60, opacity));
+    } else if (play) animate(element, kind, delay, opacity);
   }
 
   function finishActive() {
@@ -210,15 +209,18 @@ export function initReveals() {
           // A native anchor jump may cross several sections on its way to
           // the target. Skipping that transit must not count as a first visit:
           // keep the natural content visible and observe its next real entry.
-          if (document.hidden || performance.now() < skipUntil || record.element.getBoundingClientRect().bottom <= 0) return;
+          const bounds = record.element.getBoundingClientRect();
+          if (document.hidden || performance.now() < skipUntil || bounds.bottom <= 0) return;
           const grouped = record.kind === 'card' || record.kind === 'row';
           const count = counts.get(record.kind) || 0;
           if (grouped) counts.set(record.kind, count + 1);
-          const delay = grouped ? Math.min(record.delay + count * 70, 140) : record.delay;
+          const delay = grouped ? Math.min(record.delay + count * 60, 120) : record.delay;
           // Start at the actual viewport, so a slow scroll cannot consume the
           // whole effect offscreen. Entries from either edge can move without
           // hiding any content that has already been painted.
-          enter(record, true, delay);
+          const edge = (bounds.top >= window.innerHeight - 96 && bounds.top < window.innerHeight)
+            || (bounds.bottom > 0 && bounds.bottom <= 96);
+          enter(record, true, delay, edge ? .5 : 1);
         });
     }, {rootMargin: '0px', threshold: 0});
 

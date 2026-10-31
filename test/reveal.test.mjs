@@ -204,7 +204,7 @@ test('a deep reload preserves first entrances above the viewport when scrolling 
   assert.equal(f.effects.length, 2);
   assert.equal(f.deliveryCopy.dataset.revealState, 'running');
   assert.equal(f.image.dataset.revealState, 'running');
-  assert.ok(f.effects.every(({frames}) => frames.every(frame => frame.opacity === 1)));
+  assert.ok(f.effects.every(({frames}) => frames[0].opacity === .5 && frames.at(-1).opacity === 1));
   f.enter(f.deliveryGroup);
   assert.equal(f.effects.length, 2, 'revisiting still must not replay the pair');
   assertNaturalStyles(f.deliveryCopy, f.image, f.heading);
@@ -295,24 +295,42 @@ test('slow scroll entrances start at the viewport instead of being spent offscre
   f.heading.top = 799;
   f.enter(f.heading);
   assert.equal(f.heading.dataset.revealState, 'running');
-  assert.equal(f.effects[0].options.duration, 600);
+  assert.equal(f.effects[0].options.duration, 700);
+  assert.equal(f.effects[0].frames[0].opacity, .5);
   // A late callback keeps all painted text visible while moving it softly.
-  f.description.top = 740;
+  f.description.top = 680;
   f.enter(f.description);
   assert.equal(f.description.dataset.revealState, 'running');
   assert.equal(f.effects.length, 2);
-  assert.ok(f.effects.every(({frames}) => frames.every(frame => frame.opacity === 1)), 'observer delivery must never turn readable text transparent');
+  assert.ok(f.effects[1].frames.every(frame => frame.opacity === 1), 'late delivery must not fade text already fully on screen');
   assertNaturalStyles(f.description);
 });
 
-test('late on-screen groups move without fading out and passed groups stay still', () => {
+test('opacity changes only for actual arrivals within 96px of either viewport edge', () => {
+  for (const {top, opacity} of [
+    {top: 799, opacity: .5}, {top: 704, opacity: .5},
+    {top: -20, opacity: .5}, {top: 36, opacity: .5},
+    {top: 703, opacity: 1}, {top: 400, opacity: 1}, {top: 37, opacity: 1}
+  ]) {
+    const f = fixture();
+    f.heading.top = top;
+    f.enter(f.heading);
+    assert.equal(f.effects.length, 1);
+    assert.equal(f.effects[0].frames[0].opacity, opacity, `top ${top} should ${opacity === 1 ? 'keep painted text opaque' : 'use a short edge fade'}`);
+    assert.equal(f.effects[0].frames.at(-1).opacity, 1);
+    assert.equal(f.effects[0].frames[0].translate, '0 24px');
+    assertNaturalStyles(f.heading);
+  }
+});
+
+test('groups fade only on incoming edges while late fully visible groups keep their opacity', () => {
   for (const top of [799, 400]) {
     const f = fixture();
     f.track.top = top;
     f.deliveryGroup.top = top;
     f.enter(f.track, f.deliveryGroup);
     assert.equal(f.effects.length, 5);
-    assert.ok(f.effects.every(({frames}) => frames.every(frame => frame.opacity === 1)));
+    assert.ok(f.effects.every(({frames}) => frames[0].opacity === (top === 799 ? .5 : 1) && frames.at(-1).opacity === 1));
     assert.ok(f.cards.every(card => card.dataset.revealState === 'done' || card.dataset.revealState === 'running'));
     assert.equal(f.deliveryCopy.dataset.revealState, 'running');
     assert.equal(f.image.dataset.revealState, 'running');
@@ -341,8 +359,8 @@ test('text, actions and card batches use bounded motion without replacing hover 
   f.enter(f.heading, f.description, f.action, ...f.mattressCards, ...f.rows);
   assert.equal(f.effects.length, 9);
   for (const { frames, options } of f.effects) {
-    assert.ok(options.duration >= 450 && options.duration <= 700);
-    assert.ok(options.delay >= 0 && options.delay <= 140);
+    assert.ok(options.duration >= 650 && options.duration <= 700);
+    assert.ok(options.delay >= 0 && options.delay <= 120);
     assert.equal(options.fill, 'backwards');
     assert.match(options.easing, /cubic-bezier/);
     assert.ok(frames.every(frame => !('transform' in frame) && !('scale' in frame) && !('rotate' in frame)));
@@ -350,10 +368,10 @@ test('text, actions and card batches use bounded motion without replacing hover 
     assert.equal(frames.at(-1).opacity, 1);
     if ('translate' in frames[0]) {
       const distance = Number(frames[0].translate.match(/^0 (\d+)px$/)?.[1]);
-      assert.ok(distance >= 12 && distance <= 24);
+      assert.ok(distance >= 18 && distance <= 28);
     }
   }
-  assert.deepEqual(f.effects.filter(effect => f.mattressCards.includes(effect.element)).map(effect => effect.options.delay), [0, 70, 140]);
+  assert.deepEqual(f.effects.filter(effect => f.mattressCards.includes(effect.element)).map(effect => effect.options.delay), [0, 60, 120]);
   const count = f.effects.length;
   f.enter(f.heading, ...f.mattressCards);
   assert.equal(f.effects.length, count, 'returning to a section must not restart its reveal');
@@ -372,12 +390,12 @@ test('delivery enters once as a synchronized horizontal pair with opposite direc
   assert.equal(f.effects.length, 2);
   const copy = f.effects.find(effect => effect.element === f.deliveryCopy);
   const truck = f.effects.find(effect => effect.element === f.image);
-  assert.deepEqual(Array.from(copy.frames, frame => ({ ...frame })), [{ opacity: 1, translate: '-24px 0' }, { opacity: 1, translate: '0 0' }]);
-  assert.deepEqual(Array.from(truck.frames, frame => ({ ...frame })), [{ opacity: 1, translate: '24px 0' }, { opacity: 1, translate: '0 0' }]);
+  assert.deepEqual(Array.from(copy.frames, frame => ({ ...frame })), [{ opacity: 1, translate: '-44px 0' }, { opacity: 1, translate: '0 0' }]);
+  assert.deepEqual(Array.from(truck.frames, frame => ({ ...frame })), [{ opacity: 1, translate: '44px 0' }, { opacity: 1, translate: '0 0' }]);
   for (const effect of [copy, truck]) {
-    assert.equal(effect.options.duration, 600);
+    assert.equal(effect.options.duration, 700);
     assert.equal(effect.options.delay, 0);
-    assert.equal(effect.options.easing, 'cubic-bezier(.22,1,.36,1)');
+    assert.equal(effect.options.easing, 'cubic-bezier(.22,.68,.28,1)');
     assert.ok(effect.frames.every(frame => !('transform' in frame) && !('scale' in frame) && !('rotate' in frame)));
   }
   assertNaturalStyles(f.deliveryGroup, f.deliveryCopy, f.image);
@@ -414,7 +432,7 @@ test('all nine original bed cards are marked before the visible batch animates a
   f.enter(f.track);
   assert.equal(f.firstBedMarked(), true);
   assert.deepEqual(f.effects.map(effect => effect.element), f.cards.slice(0, 3));
-  assert.deepEqual(f.effects.map(effect => effect.options.delay), [0, 70, 140]);
+  assert.deepEqual(f.effects.map(effect => effect.options.delay), [0, 60, 120]);
   assert.ok(f.cards.every(card => card.dataset.revealState !== 'pending' && card.dataset.revealState));
   for (let index = 0; index < 27; index++) { f.recycle(); f.enter(f.track, ...f.cards); }
   assert.equal(f.effects.length, 3);
