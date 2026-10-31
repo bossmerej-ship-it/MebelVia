@@ -44,7 +44,7 @@ function fixture(reduced = false, options = {}) {
     jumpCameraToGoal() {}
   }
   const section = new Element(), viewer = new Element(), photo = new Element();
-  const sticky = { clientHeight: 1000 };
+  const sticky = { clientHeight: 1000, getBoundingClientRect: () => ({top:0,bottom:1000}) };
   section.dataset.liftState = 'photo';
   section.top = options.sectionTop ?? 0;
   section.querySelector = selector => ({ '#hanna-bed': viewer, '.collection-image': photo, '.collection-sticky': sticky })[selector];
@@ -53,7 +53,7 @@ function fixture(reduced = false, options = {}) {
   viewer.duration = 1;
   const document = new EventTarget();
   document.querySelector = () => section;
-  document.hidden = false;
+  document.hidden = options.hidden ?? false;
   const window = new EventTarget();
   window.innerWidth = 1440;
   window.innerHeight = 1000;
@@ -98,7 +98,7 @@ function fixture(reduced = false, options = {}) {
     performance: { now: () => now },
     requestAnimationFrame: callback => { frames.set(++frameId, callback); return frameId; },
     cancelAnimationFrame: id => frames.delete(id),
-    setTimeout: callback => { timers.set(++timerId, callback); return timerId; },
+    setTimeout: (callback, delay) => { callback.delay = delay; timers.set(++timerId, callback); return timerId; },
     clearTimeout: id => timers.delete(id)
   });
   const flush = (elapsed = 1000 / 60) => {
@@ -109,13 +109,17 @@ function fixture(reduced = false, options = {}) {
     for (let i = 0; frames.size && i < 120; i++) flush();
     assert.equal(frames.size, 0, 'the damper must settle without an idle frame loop');
   };
+  const waitForVisit = () => {
+    for (const [id, callback] of [...timers]) if (callback.delay === 160) {timers.delete(id);callback();}
+  };
   return {
     section, viewer, photo, catalogue, window, document, motion, frames, timers, flush, settle, poses,
     reads: () => boundsReads,
-    near: value => intersect([{ isIntersecting: value }]),
+    near(value, wait = true) { intersect([{ isIntersecting: value }]); if (wait) waitForVisit(); },
+    waitForVisit,
     loaded: () => viewer.dispatchEvent(new Event('load')),
     narrow: value => { narrow.matches = value; window.dispatchEvent(new Event('resize')); },
-    preference: value => { motion.matches = value; motion.dispatchEvent(new Event('change')); }
+    preference: value => { motion.matches = value; motion.dispatchEvent(new Event('change')); waitForVisit(); }
   };
 }
 
@@ -156,6 +160,36 @@ test('asset loading is lazy and failure keeps the accessible photo in normal flo
   f.loaded();
   assert.equal(f.section.dataset.liftState, 'unavailable', 'a late response must not replace the fallback');
   assert.equal(f.frames.size, 0);
+});
+
+test('brief restoration intersections do not start WebGL or download a model', () => {
+  const f = fixture();
+  f.near(true, false);
+  assert.equal(f.viewer.getAttribute('src'), null);
+  assert.equal(f.section.dataset.liftState, 'photo');
+  f.near(false, false);
+  f.waitForVisit();
+  assert.equal(f.viewer.getAttribute('src'), null, 'leaving before the dwell cancels initialization');
+  assert.equal(f.timers.size, 0);
+  f.near(true);
+  assert.equal(f.viewer.getAttribute('src'), 'assets/models/hanna.glb', 'a sustained visit still activates 3D');
+});
+
+test('background loads wait for visibility and current scene intersection', () => {
+  const f = fixture(false, {hidden:true});
+  f.near(true);
+  assert.equal(f.viewer.getAttribute('src'), null);
+  f.document.hidden = false;
+  f.document.dispatchEvent(new Event('visibilitychange'));
+  f.waitForVisit();
+  assert.equal(f.viewer.getAttribute('src'), 'assets/models/hanna.glb');
+  const leave = fixture();
+  leave.near(true, false);
+  leave.document.hidden = true;
+  leave.document.dispatchEvent(new Event('visibilitychange'));
+  leave.waitForVisit();
+  assert.equal(leave.viewer.getAttribute('src'), null);
+  assert.equal(leave.timers.size, 0);
 });
 
 test('a missing response times out without activating a tall scroll section', () => {

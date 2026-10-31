@@ -20,6 +20,7 @@ export function initHannaLift() {
   let near = false;
   let frame = 0;
   let deadline;
+  let loadDelay;
   let lastProgress = -1;
   let targetProgress = 0;
   let targetDirty = true;
@@ -83,6 +84,7 @@ export function initHannaLift() {
   }
 
   function showPhoto(state) {
+    clearTimeout(loadDelay);
     cancelFrame();
     changeLayout(() => {
       section.dataset.liftState = state;
@@ -203,7 +205,7 @@ export function initHannaLift() {
   }
 
   async function requestModel() {
-    if (requested || failed || motion.matches) return;
+    if (requested || failed || motion.matches || !near || document.hidden) return;
     requested = true;
     section.dataset.liftState = 'loading';
     deadline = setTimeout(unavailable, 30000);
@@ -213,10 +215,28 @@ export function initHannaLift() {
         await import('./assets/vendor/model-viewer-4.4.0.min.js');
       }
       if (failed) return;
+      if (!near || document.hidden || motion.matches) {
+        requested = false;
+        clearTimeout(deadline);
+        section.dataset.liftState = 'photo';
+        return;
+      }
       viewer.setAttribute('src', viewer.dataset.src);
     } catch {
       unavailable();
     }
+  }
+
+  function queueModel() {
+    clearTimeout(loadDelay);
+    if (requested || failed || motion.matches || !near || document.hidden) return;
+    // Passing the scene during a fast gesture or native restoration must not
+    // start GLB decoding and shader compilation. Load only after a brief,
+    // sustained visit to the real sticky viewport, never a large preload area.
+    loadDelay = setTimeout(() => {
+      const bounds = sticky.getBoundingClientRect();
+      if (bounds.top < window.innerHeight && bounds.bottom > 0) requestModel();
+    }, 160);
   }
 
   viewer.addEventListener('load', modelReady);
@@ -226,12 +246,17 @@ export function initHannaLift() {
     else if (!failed) {
       reserveLayout();
       if (loaded) activate();
-      else if (near) requestModel();
+      else if (near) queueModel();
     }
   });
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden) cancelFrame();
-    else resume();
+    if (document.hidden) {
+      clearTimeout(loadDelay);
+      cancelFrame();
+    } else {
+      queueModel();
+      resume();
+    }
   });
   window.addEventListener('pageshow', resume);
 
@@ -242,14 +267,17 @@ export function initHannaLift() {
       const wasNear = near;
       near = entries[0].isIntersecting;
       if (near) {
-        requestModel();
+        queueModel();
         if (!wasNear) resume();
-      } else cancelFrame();
-    }, { rootMargin: '125% 0px' });
-    observer.observe(section);
+      } else {
+        clearTimeout(loadDelay);
+        cancelFrame();
+      }
+    }, { rootMargin: '0px', threshold: 0 });
+    observer.observe(sticky);
   } else {
     near = true;
-    requestModel();
+    queueModel();
   }
 }
 
