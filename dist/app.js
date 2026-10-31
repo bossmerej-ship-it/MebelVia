@@ -1,5 +1,5 @@
-import { products, whatsappUrl } from './catalog.js';
-import { productPhotos, initProductPhotos } from './product-photos.js';
+import { products, whatsappUrl } from './catalog.js?v=0ef7a2c9c999';
+import { productPhotos, initProductPhotos } from './product-photos.js?v=90732c863d63';
 import { initConsultationHint } from './consultation-hint.js';
 import { initBedCarousel } from './bed-carousel.js?v=8548410c2694';
 
