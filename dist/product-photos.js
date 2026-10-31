@@ -1,4 +1,6 @@
 const escapeHTML = value => String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const mattressPhotoSizes = '(max-width:679px) calc(100vw - 36px), (max-width:760px) calc((100vw - 56px) / 2), (max-width:1100px) calc((100vw - 76px) / 2), (max-width:1496px) calc((100vw - 140px) / 3), 452px';
+const dialogPhotoSizes = '(max-width:760px) calc(100vw - 24px), (max-width:1048px) calc((100vw - 48px) / 2), 500px';
 
 export function productPhotos(product, inDialog = false) {
   if (!product.image) return '';
@@ -6,9 +8,15 @@ export function productPhotos(product, inDialog = false) {
   const tag = inDialog ? 'div' : 'button';
   const action = inDialog ? '' : `type="button" data-product="${product.id}" aria-label="Подробнее: ${name}"`;
   const alternate = product.alternateImage;
+  const responsive = product.imageSrcset
+    ? ` srcset="${escapeHTML(product.imageSrcset)}" sizes="${inDialog ? dialogPhotoSizes : mattressPhotoSizes}"`
+    : '';
+  const dimensions = product.imageWidth && product.imageHeight
+    ? ` width="${escapeHTML(product.imageWidth)}" height="${escapeHTML(product.imageHeight)}"`
+    : '';
   return `<div class="product-media${product.category === 'mattress' ? ' product-media-mattress' : ''}"${alternate ? ' data-gallery' : ''}>
     <${tag} class="photo-button" ${action}>
-      <img class="product-photo" src="${escapeHTML(product.image)}" alt="${escapeHTML(product.imageAlt || product.name)}" ${inDialog ? '' : 'loading="lazy"'} decoding="async" style="object-position:${escapeHTML(inDialog ? 'center' : product.imagePosition || 'center')}">
+      <img class="product-photo" src="${escapeHTML(product.image)}"${responsive}${dimensions} alt="${escapeHTML(product.imageAlt || product.name)}" ${inDialog ? '' : 'loading="lazy"'} decoding="async" style="object-position:${escapeHTML(inDialog ? 'center' : product.imagePosition || 'center')}">
       ${alternate ? `<img class="product-secondary" data-src="${escapeHTML(alternate)}" alt="" decoding="async">` : ''}
     </${tag}>
     ${alternate ? `<button type="button" class="photo-toggle" aria-label="Второе фото: ${name}" aria-pressed="false"><span class="photo-count" aria-hidden="true">1 / 2</span><svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></button>
