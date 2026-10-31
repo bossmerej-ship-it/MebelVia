@@ -2,6 +2,7 @@
 .hero{height:100vh;height:100svh;min-height:640px;background:#563524}
 .hero:after{display:none}
 .bed-stage{position:absolute;inset:0;z-index:1;min-width:0}
+.bed-model-layer{position:absolute;inset:0;z-index:1;pointer-events:none}
 .bed-open{position:absolute;inset:0;width:100%;height:100%;padding:0;border:0;background:transparent;cursor:pointer;touch-action:pan-y}
 .bed-photo{display:block;width:100%;height:100%;object-fit:cover;object-position:center top;pointer-events:none}
 .bed-open:focus-visible{outline:3px solid #ff8a24;outline-offset:-8px}
