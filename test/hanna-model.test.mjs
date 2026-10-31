@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {Object3D, Vector3, Quaternion} from 'three';
+import {PNG} from 'pngjs';
 
 const bytes = readFileSync(new URL('../dist/assets/models/hanna.glb', import.meta.url));
 const jsonLength = bytes.readUInt32LE(12);
@@ -98,6 +99,65 @@ test('fabric exports retain restrained fibre sheen instead of a full white coati
     assert.ok(sheen.every(value => value >= 0 && value <= .35), `${material.name} must not export full-intensity sheen`);
     assert.equal(material.pbrMetallicRoughness.metallicFactor, 0);
   }
+});
+
+test('internal fittings fit the animation budget without reducing textile mesh detail', () => {
+  const primitives = gltf.meshes.flatMap(mesh => mesh.primitives);
+  const triangles = primitive => (primitive.indices === undefined
+    ? gltf.accessors[primitive.attributes.POSITION].count
+    : gltf.accessors[primitive.indices].count) / 3;
+  const total = primitives.reduce((sum, primitive) => sum + triangles(primitive), 0);
+  assert.ok(total < 145000, `${total} triangles exceed the animated-model budget`);
+  const textile = primitives.filter(primitive => gltf.materials[primitive.material].extensions?.KHR_materials_sheen);
+  assert.equal(textile.length, 9, 'keep all original upholstery, piping and bedding meshes');
+  assert.ok(textile.reduce((sum, primitive) => sum + triangles(primitive), 0) >= 128852,
+    'performance savings must come from internal fittings, not the fabric sculpt');
+  const caps = gltf.nodes.find(node => node.name === 'UpperAssembly_Gas_strut_black_enamel');
+  const capTriangles = gltf.meshes[caps.mesh].primitives.reduce((sum, primitive) => sum + triangles(primitive), 0);
+  assert.ok(capTriangles < 7500, 'tiny slat caps must not consume tens of thousands of triangles');
+});
+
+test('the fixed soft floor shadow follows the baked-shadow contract without enlarging bed bounds', () => {
+  pose(0);
+  const shadow = byName('HannaFixedGroundShadow');
+  assert.equal(shadow.parent, byName('FixedFrame'));
+  assert.ok(channels.every(channel => channel.object !== shadow));
+  const primitive = gltf.meshes[gltf.nodes[objects.indexOf(shadow)].mesh].primitives[0];
+  const material = gltf.materials[primitive.material];
+  assert.equal(material.alphaMode, 'BLEND');
+  assert.ok(material.extensions.KHR_materials_unlit, 'a floor shadow must not require lit PBR shading');
+  const bounds = object => {
+    const min=new Vector3(Infinity,Infinity,Infinity),max=new Vector3(-Infinity,-Infinity,-Infinity);
+    object.traverse(node => {
+      if(node===shadow&&object!==shadow) return;
+      const mesh=gltf.nodes[objects.indexOf(node)]?.mesh;
+      if(mesh===undefined) return;
+      for(const part of gltf.meshes[mesh].primitives) for(const position of values(part.attributes.POSITION)) {
+        const point=new Vector3(...position).applyMatrix4(node.matrixWorld);min.min(point);max.max(point);
+      }
+    });
+    return {min,max,size:max.clone().sub(min)};
+  };
+  const bed=bounds(root),floor=bounds(shadow);
+  assert.ok(floor.size.y<.00001, 'the transparent surface must be flat enough to be recognized');
+  assert.ok(Math.max(floor.size.x,floor.size.z)>=100*floor.size.y);
+  assert.ok(floor.min.y<bed.min.y+bed.size.y/100, 'the plane must be at floor level');
+  assert.ok(floor.min.x<=bed.min.x&&floor.max.x>=bed.max.x&&floor.min.z<=bed.min.z&&floor.max.z>=bed.max.z,
+    'model-viewer excludes a baked floor shadow only when it encloses the bed footprint');
+  assert.ok(Math.abs(bed.size.x-2.013005018)<.00001&&Math.abs(bed.size.z-2.343556166)<.00001,
+    'the visible bed dimensions must remain unchanged');
+  const image=gltf.images[gltf.textures[material.pbrMetallicRoughness.baseColorTexture.index].source];
+  const view=gltf.bufferViews[image.bufferView],start=binaryStart+(view.byteOffset||0);
+  const png=PNG.sync.read(bytes.subarray(start,start+view.byteLength));
+  let peak=0,maxStep=0;
+  for(let y=0;y<png.height;y++)for(let x=0;x<png.width;x++){
+    const alpha=png.data[(y*png.width+x)*4+3];peak=Math.max(peak,alpha);
+    if(x)maxStep=Math.max(maxStep,Math.abs(alpha-png.data[(y*png.width+x-1)*4+3]));
+    if(y)maxStep=Math.max(maxStep,Math.abs(alpha-png.data[((y-1)*png.width+x)*4+3]));
+    if(!x||!y||x===png.width-1||y===png.height-1) assert.equal(alpha,0,'the texture must fade out before its border');
+  }
+  assert.ok(peak>20&&peak<=46,'the shadow must remain a restrained 8–18% studio shadow');
+  assert.ok(maxStep<=4,'the penumbra must remain soft without a black outline');
 });
 
 test('exported arms and telescopic struts stay attached throughout the lift, including between keyframes', () => {

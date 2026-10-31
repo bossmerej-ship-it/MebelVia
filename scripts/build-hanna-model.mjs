@@ -104,7 +104,11 @@ function subdivideUpholsteryFaces(geometry){
 }
 function box(parent,size,pos,mat,r=.02,rot=[0,0,0],scale=1){
   const radius=Math.min(r,...size.map(v=>v/2));
-  let g=new RoundedBoxGeometry(...size,mat===velvet?7:3,radius);
+  // Upholstery keeps its full sculpted surface. Millimetre bevels on the
+  // internal caps, rails and boards need only one rounded segment: repeating
+  // seven divisions over every tiny flat face wastes the animated draw budget.
+  const segments=mat.isMeshPhysicalMaterial?(mat===velvet?7:3):1;
+  let g=new RoundedBoxGeometry(...size,segments,radius);
   const fittedTicking=mat===mattressMat&&size[1]>.1;
   if(mat===velvet||fittedTicking)g=subdivideUpholsteryFaces(g);
   // Physical textile coordinates keep the grain tiny and consistent across pieces.
@@ -308,12 +312,12 @@ for(const [side,x] of [['Left',-.747],['Right',.747]]){
   const bolts=[];
   for(const label of ['A','B','C','D','GasFixed','GasMoving']){
     const bolt=new THREE.Mesh(new THREE.CylinderGeometry(.017,.017,.022,12),chrome);bolt.name='Pivot'+side+label;
-    bolt.rotation.z=Math.PI/2;mechanism.add(bolt);movers.push(bolt);bolts.push(bolt);drawCalls++;
+    bolt.rotation.z=Math.PI/2;mechanism.add(bolt);movers.push(bolt);bolts.push(bolt);triangles+=(bolt.geometry.index?.count??bolt.geometry.attributes.position.count)/3;drawCalls++;
   }
   rigs.push({x,side,short,long,gasBody,gasRod,bolts});
   // Mounting plate on the fixed inner rail, separate from moving arms.
   const plate=new THREE.Mesh(new RoundedBoxGeometry(.016,.16,.84,2,.008),armMat);
-  plate.name='FixedMount'+side;plate.position.set(x,.25,-.15);mechanism.add(plate);drawCalls++;
+  plate.name='FixedMount'+side;plate.position.set(x,.25,-.15);mechanism.add(plate);triangles+=(plate.geometry.index?.count??plate.geometry.attributes.position.count)/3;drawCalls++;
 }
 function worldPoint(p,local){return new THREE.Vector3(...local).applyQuaternion(p.quaternion).add(p.position);}
 function setPose(t){
@@ -357,6 +361,29 @@ scene.userData={
   mechanism:{...linkage,coordinates:'[z,y] in the side plane; originZ adds to all linkage z values',movingNode:'UpperAssembly',fixedNode:'FixedFrame',sideX:[-.747,.747],fixedGas:[.135,.55],movingGasLocal:[-.015,.72],gasBodyLength:.48,gasRodLength:.60,clip:'Lift',duration:1},
   validation:{samples,maxArmLengthError:maxArmError,minMovingBoundsHeadClearance:minHeadClearance,minMovingY:minFloor,minGasOverlap,maxGasOverlap},
 };
+
+// The fixed upholstered body determines the floor footprint throughout Lift.
+// A transparent unlit floor plane follows model-viewer's baked-shadow contract:
+// it encloses the bed at ground level, so it is excluded from camera bounds and
+// shown when runtime shadow-intensity is zero. Add it after the cloth's AO bake
+// and the mechanism measurements; it never changes contact shading or the rig.
+const groundShadowMaterial=new THREE.MeshBasicMaterial({name:'Soft fixed ground shadow',color:0x000000,transparent:true,depthWrite:false});
+groundShadowMaterial.userData={groundShadow:true};
+const groundShadow=new THREE.Mesh(new THREE.PlaneGeometry(2.5,2.7),groundShadowMaterial);
+groundShadow.name='HannaFixedGroundShadow';groundShadow.rotation.x=-Math.PI/2;groundShadow.position.y=.001;
+groundShadow.userData={groundShadow:true};fixed.add(groundShadow);triangles+=2;drawCalls++;
+
+function groundShadowPng(){
+  const size=256,png=new PNG({width:size,height:size});
+  for(let y=0;y<size;y++)for(let x=0;x<size;x++){
+    const worldX=((x+.5)/size-.5)*2.5,worldZ=((y+.5)/size-.5)*2.7;
+    const dx=Math.max(0,Math.abs(worldX)-.91),dz=Math.max(0,Math.abs(worldZ-.01)-1.075);
+    const alpha=.16*Math.exp(-(dx*dx+dz*dz)/(2*.085**2));
+    const offset=(y*size+x)*4;png.data[offset]=png.data[offset+1]=png.data[offset+2]=0;
+    png.data[offset+3]=Math.round(alpha*255);
+  }
+  return PNG.sync.write(png);
+}
 
 // A small embedded color weave plus normal maps gives clean fabric at any size.
 function texturePng(kind){
@@ -415,6 +442,9 @@ for(const texture of textureDefs){
     }
   }
 }
+const groundTexture=embedImage(groundShadowPng(),'fixed-ground-shadow','image/png');
+gltf.materials.find(material=>material.extras?.groundShadow).pbrMetallicRoughness.baseColorTexture={index:groundTexture};
+
 gltf.buffers[0].byteLength=byteLength;
 const json=Buffer.from(JSON.stringify(gltf)),jsonPad=Buffer.alloc((4-json.length%4)%4,0x20),body=Buffer.concat(parts),bodyPad=Buffer.alloc((4-body.length%4)%4);
 const header=Buffer.alloc(20);header.writeUInt32LE(0x46546c67,0);header.writeUInt32LE(2,4);header.writeUInt32LE(20+json.length+jsonPad.length+8+body.length+bodyPad.length,8);header.writeUInt32LE(json.length+jsonPad.length,12);header.writeUInt32LE(0x4e4f534a,16);
