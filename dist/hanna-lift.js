@@ -22,6 +22,7 @@ export function initHannaLift() {
   let frame = 0;
   let deadline;
   let loadDelay;
+  let lastScrollAt = -Infinity;
   let lastProgress = -1;
   let targetProgress = 0;
   let targetDirty = true;
@@ -202,6 +203,7 @@ export function initHannaLift() {
     }
     duration = viewer.duration;
     loaded = true;
+    window.removeEventListener('scroll', deferDuringScroll);
     activate();
   }
 
@@ -216,10 +218,11 @@ export function initHannaLift() {
         await import('./assets/vendor/model-viewer-4.4.0.min.js');
       }
       if (failed) return;
-      if (!near || document.hidden || motion.matches) {
+      if (!near || document.hidden || motion.matches || performance.now() - lastScrollAt < 160) {
         requested = false;
         clearTimeout(deadline);
         section.dataset.liftState = 'photo';
+        queueModel();
         return;
       }
       viewer.setAttribute('src', viewer.dataset.src);
@@ -232,12 +235,18 @@ export function initHannaLift() {
     clearTimeout(loadDelay);
     if (requested || failed || motion.matches || !near || document.hidden) return;
     // Passing the scene during a fast gesture or native restoration must not
-    // start GLB decoding and shader compilation. Load only after a brief,
-    // sustained visit to the real sticky viewport, never a large preload area.
+    // start GLB decoding and shader compilation. Wait for a brief pause in
+    // scrolling inside the real canvas, never a large preload area.
     loadDelay = setTimeout(() => {
       const bounds = visual.getBoundingClientRect();
       if (bounds.top < window.innerHeight && bounds.bottom > 0) requestModel();
     }, 160);
+  }
+
+  function deferDuringScroll() {
+    if (loaded || failed) return;
+    lastScrollAt = performance.now();
+    queueModel();
   }
 
   viewer.addEventListener('load', modelReady);
@@ -259,11 +268,14 @@ export function initHannaLift() {
       resume();
     }
   });
+  window.addEventListener('scroll', deferDuringScroll, {passive: true});
   window.addEventListener('pageshow', resume);
 
   if (motion.matches) showPhoto('reduced');
   else reserveLayout();
   if ('IntersectionObserver' in window) {
+    // A positive threshold distinguishes an edge-adjacent zero-area entry
+    // from the first visible pixels, so a rejected dwell is queued again.
     const observer = new IntersectionObserver(entries => {
       const wasNear = near;
       near = entries[0].isIntersecting;
@@ -274,11 +286,27 @@ export function initHannaLift() {
         clearTimeout(loadDelay);
         cancelFrame();
       }
-    }, { rootMargin: '0px', threshold: 0 });
+    }, { rootMargin: '0px', threshold: .00001 });
     observer.observe(visual);
   } else {
-    near = true;
-    queueModel();
+    // Retain lazy loading in browsers without IntersectionObserver. A single
+    // initial bounds check could otherwise strand an initially offscreen bed.
+    const checkVisibility = () => {
+      const bounds = visual.getBoundingClientRect();
+      const wasNear = near;
+      near = bounds.top < window.innerHeight && bounds.bottom > 0;
+      if (near) {
+        queueModel();
+        if (!wasNear) resume();
+      } else {
+        clearTimeout(loadDelay);
+        cancelFrame();
+      }
+    };
+    window.addEventListener('scroll', checkVisibility, {passive: true});
+    window.addEventListener('resize', checkVisibility, {passive: true});
+    window.addEventListener('pageshow', checkVisibility);
+    checkVisibility();
   }
 }
 

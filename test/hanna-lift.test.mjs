@@ -35,7 +35,8 @@ function fixture(reduced = false, options = {}) {
   class Element extends EventTarget {
     attrs = new Map();
     dataset = {};
-    setAttribute(key, value) { this.attrs.set(key, String(value)); }
+    assetRequests = 0;
+    setAttribute(key, value) { this.attrs.set(key, String(value)); if (key === 'src') this.assetRequests++; }
     getAttribute(key) { return this.attrs.get(key) ?? null; }
     removeAttribute(key) { this.attrs.delete(key); }
     querySelectorAll() { return []; }
@@ -45,7 +46,8 @@ function fixture(reduced = false, options = {}) {
   }
   const section = new Element(), viewer = new Element(), photo = new Element();
   const sticky = { clientHeight: 1000, getBoundingClientRect: () => ({top:0,bottom:1000}) };
-  const visual = {getBoundingClientRect: () => ({top:options.visualTop ?? 0,bottom:options.visualBottom ?? 1000})};
+  const visual = {top:options.visualTop ?? 0,bottom:options.visualBottom ?? 1000,
+    getBoundingClientRect() {return {top:this.top,bottom:this.bottom};}};
   section.dataset.liftState = 'photo';
   section.top = options.sectionTop ?? 0;
   section.querySelector = selector => ({ '#hanna-bed': viewer, '.collection-image': photo, '.collection-sticky': sticky, '.collection-visual': visual })[selector];
@@ -84,17 +86,22 @@ function fixture(reduced = false, options = {}) {
   motion.matches = reduced;
   const narrow = { matches: false };
   const frames = new Map(), timers = new Map();
-  let frameId = 0, timerId = 0, intersect, now = 0;
+  let frameId = 0, timerId = 0, intersect, intersectionOptions, observedTarget, now = 0;
   class IntersectionObserver {
-    constructor(callback) { intersect = callback; }
-    observe() {}
+    constructor(callback, configuration) { intersect = callback; intersectionOptions = configuration; }
+    observe(target) { observedTarget = target; }
   }
-  window.IntersectionObserver = IntersectionObserver;
-  const source = readFileSync(new URL('../dist/hanna-lift.js', import.meta.url), 'utf8').replaceAll('export function ', 'function ');
+  if (!options.noObserver) window.IntersectionObserver = IntersectionObserver;
+  let registered = !options.deferImport, resolveImport;
+  const pendingImport = new Promise(resolve => {resolveImport = () => {registered = true; resolve();};});
+  const source = readFileSync(new URL('../dist/hanna-lift.js', import.meta.url), 'utf8')
+    .replaceAll('export function ', 'function ')
+    .replace("await import('./assets/vendor/model-viewer-4.4.0.min.js');", 'await importViewer();');
   vm.runInNewContext(source, {
     document, window, IntersectionObserver,
     matchMedia: query => query.includes('max-width') ? narrow : motion,
-    customElements: { get: () => Element },
+    customElements: { get: () => registered ? Element : undefined },
+    importViewer: () => pendingImport,
     getComputedStyle: element => ({ visibility: element.visibility ?? 'visible', display: 'block' }),
     performance: { now: () => now },
     requestAnimationFrame: callback => { frames.set(++frameId, callback); return frameId; },
@@ -111,10 +118,13 @@ function fixture(reduced = false, options = {}) {
     assert.equal(frames.size, 0, 'the damper must settle without an idle frame loop');
   };
   const waitForVisit = () => {
+    now += 160;
     for (const [id, callback] of [...timers]) if (callback.delay === 160) {timers.delete(id);callback();}
   };
   return {
-    section, viewer, photo, catalogue, window, document, motion, frames, timers, flush, settle, poses,
+    section, viewer, photo, catalogue, visual, window, document, motion, frames, timers, flush, settle, poses,
+    intersectionOptions, observedTarget,
+    advance: elapsed => {now += elapsed;}, resolveImport,
     reads: () => boundsReads,
     near(value, wait = true) { intersect([{ isIntersecting: value }]); if (wait) waitForVisit(); },
     waitForVisit,
@@ -176,6 +186,46 @@ test('brief restoration intersections do not start WebGL or download a model', (
   assert.equal(f.viewer.getAttribute('src'), 'assets/models/hanna.glb', 'a sustained visit still activates 3D');
 });
 
+test('continuous scrolling through the canvas waits for a real pause before loading', () => {
+  const f = fixture();
+  f.near(true, false);
+  for (let index = 0; index < 30; index++) {
+    f.advance(16);
+    f.window.dispatchEvent(new Event('scroll'));
+    assert.equal(f.viewer.getAttribute('src'), null, 'crossing the scene must not initialize the model');
+  }
+  f.near(false, false);
+  f.waitForVisit();
+  assert.equal(f.viewer.getAttribute('src'), null, 'a smooth link passing the whole scene stays dormant');
+  f.near(true, false);
+  f.window.dispatchEvent(new Event('scroll'));
+  f.waitForVisit();
+  assert.equal(f.viewer.getAttribute('src'), 'assets/models/hanna.glb', 'a quiet visit still loads');
+  f.window.dispatchEvent(new Event('scroll'));
+  f.waitForVisit();
+  assert.equal(f.viewer.assetRequests, 1, 'subsequent scrolls must not restart the requested asset');
+  f.loaded();
+  f.section.top = -700;
+  f.window.dispatchEvent(new Event('scroll')); f.settle();
+  assert.ok(Math.abs(f.viewer.currentTime - .499995) < .000001, 'the loaded mechanism still follows scrolling');
+});
+
+test('scrolling during a delayed viewer import postpones the GLB request until quiet', async () => {
+  const f = fixture(false, {deferImport:true});
+  f.near(true);
+  assert.equal(f.section.dataset.liftState, 'loading');
+  assert.equal(f.viewer.getAttribute('src'), null);
+  f.advance(40);
+  f.window.dispatchEvent(new Event('scroll'));
+  f.resolveImport();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(f.viewer.getAttribute('src'), null, 'an imported viewer must not compile a model during the gesture');
+  assert.equal(f.section.dataset.liftState, 'photo');
+  f.waitForVisit();
+  assert.equal(f.viewer.getAttribute('src'), 'assets/models/hanna.glb');
+  assert.equal(f.viewer.assetRequests, 1);
+});
+
 test('background loads wait for visibility and current scene intersection', () => {
   const f = fixture(false, {hidden:true});
   f.near(true);
@@ -198,6 +248,49 @@ test('a mobile heading in view cannot trigger a still-offscreen 3D canvas', () =
   f.near(true);
   assert.equal(f.viewer.getAttribute('src'), null, 'recheck the visual bounds after the dwell, not the sticky text');
   assert.equal(f.section.dataset.liftState, 'photo');
+});
+
+test('an edge-adjacent canvas can queue a new visit when its first pixels enter', () => {
+  const f = fixture(false, {visualTop:1000,visualBottom:1700});
+  assert.equal(f.observedTarget, f.visual, 'observe the canvas area rather than the heading');
+  assert.ok(f.intersectionOptions.threshold > 0 && f.intersectionOptions.threshold < .01,
+    'zero-area intersections need a distinct threshold from actually visible pixels');
+  f.near(true);
+  assert.equal(f.viewer.getAttribute('src'), null, 'the initial touching edge must stay dormant');
+  f.visual.top = 999;
+  f.near(true);
+  assert.equal(f.viewer.getAttribute('src'), 'assets/models/hanna.glb');
+});
+
+test('without IntersectionObserver the bed remains lazy and activates on a later visit', () => {
+  const f = fixture(false, {noObserver:true,visualTop:1200,visualBottom:1800});
+  assert.equal(f.viewer.getAttribute('src'), null);
+  assert.equal(f.timers.size, 0);
+  f.visual.top = 900;
+  f.window.dispatchEvent(new Event('scroll'));
+  assert.equal(f.viewer.getAttribute('src'), null, 'the dwell still applies');
+  f.visual.top = 1200;
+  f.window.dispatchEvent(new Event('scroll'));
+  f.waitForVisit();
+  assert.equal(f.viewer.getAttribute('src'), null, 'a passing gesture must cancel loading');
+  f.visual.top = 0;
+  f.window.dispatchEvent(new Event('resize'));
+  f.waitForVisit();
+  assert.equal(f.viewer.getAttribute('src'), 'assets/models/hanna.glb');
+  f.loaded();
+  f.section.top = -700;
+  f.window.dispatchEvent(new Event('scroll')); f.settle();
+  assert.ok(Math.abs(f.viewer.currentTime - .499995) < .000001);
+  f.visual.top = -1800; f.visual.bottom = -100;
+  f.window.dispatchEvent(new Event('scroll'));
+  assert.equal(f.frames.size, 0);
+  f.section.top = -1400;
+  f.window.dispatchEvent(new Event('scroll'));
+  assert.equal(f.frames.size, 0, 'the fallback must also stop offscreen GPU updates');
+  f.visual.top = 0; f.visual.bottom = 1000;
+  f.window.dispatchEvent(new Event('pageshow'));
+  assert.ok(f.viewer.currentTime > .9999, 'reentry samples the current pose');
+  assert.equal(f.frames.size, 0, 'no permanent fallback frame loop');
 });
 
 test('a missing response times out without activating a tall scroll section', () => {
