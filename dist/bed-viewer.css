@@ -1,12 +1,15 @@
 /* The photo itself opens the existing lazy-loaded 3D viewer. */
 .hero{height:100vh;height:100svh;min-height:640px;background:#563524}
 .hero:after{display:none}
-.bed-stage{position:absolute;inset:0;z-index:1;min-width:0}
-.bed-model-layer{position:absolute;inset:0;z-index:1;pointer-events:none}
+.bed-stage{--viewer-return-duration:450ms;position:absolute;inset:0;z-index:1;min-width:0}
+.bed-model-layer{position:absolute;inset:0;z-index:1;pointer-events:none;opacity:0;visibility:hidden;background:radial-gradient(ellipse at 65% 48%,#fff 0%,#f4f4f3 62%,#ebebea 100%);transition:opacity var(--viewer-return-duration) cubic-bezier(.22,.61,.36,1)}
+.bed-stage[data-state="model"] .bed-model-layer{opacity:1;visibility:visible}
+.bed-stage[data-state="closing"] .bed-model-layer{opacity:0;visibility:visible}
+.bed-stage[data-state="model"] .bed-open{pointer-events:none}
 .bed-open{position:absolute;inset:0;width:100%;height:100%;padding:0;border:0;background:transparent;cursor:pointer;touch-action:pan-y}
 .bed-photo{display:block;width:100%;height:100%;object-fit:cover;object-position:center top;pointer-events:none}
 .bed-open:focus-visible{outline:3px solid #ff8a24;outline-offset:-8px}
-.hero-inner.container{position:relative;z-index:2;width:100%;height:auto;display:block;pointer-events:none}
+.hero-inner.container{position:relative;z-index:2;width:100%;height:auto;display:block;pointer-events:none;opacity:1;visibility:visible;transition:opacity 450ms cubic-bezier(.22,.61,.36,1)}
 .hero-copy{width:100%;max-width:none;margin:0;padding:clamp(24px,4.4svh,48px) 24px 0;text-align:center;color:#fffaf2}
 .hero-logo{position:relative;inset:auto;margin:0 auto clamp(18px,2.4svh,28px);width:clamp(72px,10.5svh,108px);height:clamp(72px,10.5svh,108px);background:#ff7100;pointer-events:auto}
 .hero-logo span{font-size:clamp(20px,2.65svh,28px);line-height:1.02;text-align:left;letter-spacing:-.6px}
@@ -19,11 +22,11 @@
 .hero-actions .button-quiet:hover{background:#fffaf21f}
 .hero-actions .icon{display:block;width:24px;height:24px}
 .hero :is(.hero-logo,.button):focus-visible{outline:3px solid #fffaf2;outline-offset:5px}
-#hero-bed{position:absolute;top:4%;left:32%;display:block;width:68%;height:85%;background:transparent;opacity:0;pointer-events:none;touch-action:pan-y;--poster-color:transparent;transition:opacity .25s;cursor:grab}
+#hero-bed{position:absolute;top:4%;left:32%;display:block;width:68%;height:85%;background:transparent;opacity:1;pointer-events:none;touch-action:pan-y;--poster-color:transparent;cursor:grab}
 #hero-bed:active{cursor:grabbing}
 .bed-stage[data-state="model"] #hero-bed{opacity:1;pointer-events:auto}
 .bed-stage[data-state="photo"] #hero-bed{visibility:hidden}
-.bed-stage[data-state="model"]{background:radial-gradient(ellipse at 65% 48%,#fff 0%,#f4f4f3 62%,#ebebea 100%)}
+
 .bed-details{display:none;position:absolute;left:5.5%;top:50%;transform:translateY(-50%);width:28%;pointer-events:none;color:#252831}
 .bed-details h2{margin:0;font-size:clamp(36px,5.1vw,84px);line-height:1.04;letter-spacing:-.045em}
 .bed-details h2 span,.bed-details h2 strong{display:block}
@@ -31,9 +34,12 @@
 .bed-details h2 strong{font-weight:700}
 .hero .bed-rotate-hint{display:none;position:absolute;left:32%;bottom:5%;width:68%;margin:0;flex-direction:column;align-items:center;gap:9px;font-size:16px;line-height:1.4;color:#666972;pointer-events:none;text-align:center}
 .bed-rotate-hint svg{width:40px;height:32px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
-.bed-stage[data-state="model"] .bed-details{display:block}
-.bed-stage[data-state="model"] .bed-rotate-hint{display:flex}
-.hero:has(.bed-stage[data-state="model"]) .hero-inner{visibility:hidden}
+.bed-stage:is([data-state="model"],[data-state="closing"]) .bed-details{display:block}
+.bed-stage:is([data-state="model"],[data-state="closing"]) .bed-rotate-hint{display:flex}
+.hero:has(.bed-stage[data-state="model"]) .hero-inner{opacity:0;visibility:hidden;transition:opacity 450ms cubic-bezier(.22,.61,.36,1),visibility 0s 450ms}
+.hero:has(.bed-stage[data-state="closing"]) .hero-inner{opacity:1;visibility:visible}
+.bed-close{transition:opacity 180ms ease}
+.bed-stage[data-state="closing"] .bed-close{opacity:0;pointer-events:none}
 .bed-close{position:absolute;top:max(24px,env(safe-area-inset-top,0px));right:max(24px,env(safe-area-inset-right,0px));display:flex;align-items:center;gap:12px;min-height:48px;padding:0;border:0;border-radius:28px;background:transparent;color:#666972;font-size:16px;z-index:4;cursor:pointer}
 .bed-close-icon{display:grid;place-items:center;width:48px;height:48px;border:1px solid #e0e0df;border-radius:50%;background:#ffffffed;color:#41454f}
 .bed-close:hover{color:#252831}
@@ -77,4 +83,4 @@
   .hero-actions{margin-top:20px}
   .hero-actions .button{min-height:50px;padding:12px 26px;font-size:17px}
 }
-@media(prefers-reduced-motion:reduce){#hero-bed{transition:none}}
+@media(prefers-reduced-motion:reduce){.bed-model-layer,.hero-inner.container,.bed-close{transition:none!important}}
