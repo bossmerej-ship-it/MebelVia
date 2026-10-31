@@ -41,7 +41,7 @@ function fixture(options = {}) {
     get modelIsVisible() { return this.loaded && !this.posterVisible; }
   }
   const stage = new Element(), viewer = new Element(), modelLayer = new Element(), open = new Element();
-  const close = new Element(), status = new Element(), otherControl = new Element();
+  const close = new Element(), status = new Element(), otherControl = new Element(), heroCopy = new Element();
   stage.dataset.state = 'photo';
   close.hidden = true;
   viewer.dataset.src = 'assets/models/violetta.glb';
@@ -51,7 +51,7 @@ function fixture(options = {}) {
   modelLayer.setAttribute('aria-hidden', 'true');
   const elements = {'#hero-bed': viewer, '.bed-model-layer': modelLayer, '.bed-open': open, '.bed-close': close, '.bed-status': status};
   stage.querySelector = selector => elements[selector];
-  document.querySelector = () => stage;
+  document.querySelector = selector => selector === '.hero-inner' ? heroCopy : stage;
   vm.runInNewContext(source, {
     document, window, customElements: {get: () => Element}, matchMedia: () => motion,
     setTimeout(callback, delay) {
@@ -90,7 +90,7 @@ function fixture(options = {}) {
     stage.dispatchEvent(event);
     return event;
   };
-  return {stage, viewer, modelLayer, open, close, status, otherControl, document, window, motion, timers,
+  return {stage, viewer, modelLayer, open, close, status, otherControl, heroCopy, document, window, motion, timers,
     click, loaded, tick, transition, escape};
 }
 
@@ -129,6 +129,49 @@ test('3D starts on photo activation and reopens immediately after closing', () =
   assert.equal(f.stage.dataset.state, 'model', 'cached model must not wait for a second load event');
   assert.equal(f.viewer.modelIsVisible, true, 'the cached poster must be dismissed when reopening');
   assert.equal(f.viewer.assetRequests, requests, 'reopening must not download the GLB again');
+});
+
+test('reduced motion and a hidden document finish a return immediately', () => {
+  for (const options of [{reduced: true}, {hidden: true}]) {
+    const f = fixture(options);
+    f.click(f.open); f.loaded(); f.click(f.close);
+    assertPhoto(f);
+    assert.equal(f.timers.size, 0);
+    assert.equal(f.document.activeElement, f.open);
+  }
+});
+
+test('preference changes, backgrounding and page history release a pending return', () => {
+  for (const action of ['motion', 'visibility', 'pagehide']) {
+    const f = fixture();
+    f.click(f.open); f.loaded(); f.click(f.close);
+    assert.equal(f.stage.dataset.state, 'closing');
+    if (action === 'motion') {
+      f.motion.matches = true;
+      const event = new Event('change');
+      Object.defineProperty(event, 'matches', {value: true});
+      f.motion.dispatchEvent(event);
+    } else if (action === 'visibility') {
+      f.document.hidden = true;
+      f.document.dispatchEvent(new Event('visibilitychange'));
+    } else f.window.dispatchEvent(new Event('pagehide'));
+    assertPhoto(f);
+    assert.equal(f.timers.size, 0, 'no background timeout or renderer work remains');
+    f.tick(1000); f.transition();
+    assertPhoto(f);
+  }
+});
+
+test('hero links become available at the start of the return and are inert in 3D', () => {
+  const f = fixture();
+  f.click(f.open); f.loaded();
+  assert.equal(f.heroCopy.inert, true);
+  assert.equal(f.heroCopy.getAttribute('aria-hidden'), 'true');
+  f.click(f.close);
+  assert.equal(f.heroCopy.inert, false);
+  assert.equal(f.heroCopy.getAttribute('aria-hidden'), null);
+  f.click(f.open);
+  assert.equal(f.heroCopy.inert, true, 'a reversed fade restores 3D keyboard ownership');
 });
 
 test('a completion after closing cannot reveal the hidden model or steal focus', () => {

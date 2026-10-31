@@ -1,6 +1,8 @@
 const stage = document.querySelector('.bed-stage');
 const viewer = stage.querySelector('#hero-bed');
 const modelLayer = stage.querySelector('.bed-model-layer');
+const heroCopy = document.querySelector('.hero-inner');
+const motion = matchMedia('(prefers-reduced-motion: reduce)');
 const open = stage.querySelector('.bed-open');
 const close = stage.querySelector('.bed-close');
 const status = stage.querySelector('.bed-status');
@@ -12,6 +14,13 @@ let failed = false;
 let importAttempt = 0;
 let assetAttempt = 0;
 let returnTransition;
+
+function showHeroControls(available) {
+  if (!heroCopy) return;
+  heroCopy.inert = !available;
+  if (available) heroCopy.removeAttribute('aria-hidden');
+  else heroCopy.setAttribute('aria-hidden', 'true');
+}
 
 viewer.setAttribute('a11y', JSON.stringify({
   'interaction-prompt': 'Поверните мышью, пальцем или клавишами со стрелками.',
@@ -50,6 +59,7 @@ function finishPhoto(pending) {
   close.hidden = true;
   close.disabled = false;
   modelLayer.setAttribute('aria-hidden', 'true');
+  showHeroControls(true);
   viewer.setAttribute('aria-hidden', 'true');
   viewer.tabIndex = -1;
 }
@@ -65,8 +75,9 @@ function showPhoto({immediate = false} = {}) {
   viewer.setAttribute('aria-hidden', 'true');
   viewer.tabIndex = -1;
   modelLayer.setAttribute('aria-hidden', 'true');
+  showHeroControls(true);
   close.disabled = true;
-  if (immediate || !visibleModel) {
+  if (immediate || motion.matches || document.hidden || !visibleModel) {
     finishPhoto();
     open.focus({preventScroll: true});
     return;
@@ -103,6 +114,7 @@ function modelReady() {
   close.hidden = false;
   close.disabled = false;
   modelLayer.removeAttribute('aria-hidden');
+  showHeroControls(false);
   viewer.removeAttribute('aria-hidden');
   viewer.tabIndex = 0;
   viewer.focus({ preventScroll: true });
@@ -167,3 +179,10 @@ stage.addEventListener('keydown', event => {
     showPhoto();
   }
 });
+
+function finishReturning() {
+  if (stage.dataset.state === 'closing') finishPhoto(returnTransition);
+}
+motion.addEventListener('change', event => { if (event.matches) finishReturning(); });
+document.addEventListener('visibilitychange', () => { if (document.hidden) finishReturning(); });
+window.addEventListener('pagehide', finishReturning);
