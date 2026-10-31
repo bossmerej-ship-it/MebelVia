@@ -151,7 +151,12 @@ export function initReveals() {
       anchor = document.getElementById(decodeURIComponent(window.location.hash.slice(1)));
     } catch { return; }
     if (anchor) records.forEach(record => {
-      if (anchor === record.element || anchor.contains(record.element) || record.element.contains(anchor)) enter(record, false);
+      if (anchor === main) {
+        // #top belongs to the main wrapper. Treating all its descendants as
+        // the target would consume every still-unvisited section entrance.
+        const bounds = record.element.getBoundingClientRect();
+        if (record.element.closest('.hero') || (bounds.top < window.innerHeight && bounds.bottom > 0)) enter(record, false);
+      } else if (anchor === record.element || anchor.contains(record.element) || record.element.contains(anchor)) enter(record, false);
     });
   }
 
@@ -198,23 +203,31 @@ export function initReveals() {
         .forEach(entry => {
           const record = records.get(entry.target);
           if (!record || seen.has(record.element)) return;
+          if (motion.matches) {
+            enter(record, false);
+            return;
+          }
+          // A native anchor jump may cross several sections on its way to
+          // the target. Skipping that transit must not count as a first visit:
+          // keep the natural content visible and observe its next real entry.
+          if (document.hidden || performance.now() < skipUntil || record.element.getBoundingClientRect().bottom <= 0) return;
           const grouped = record.kind === 'card' || record.kind === 'row';
           const count = counts.get(record.kind) || 0;
           if (grouped) counts.set(record.kind, count + 1);
           const delay = grouped ? Math.min(record.delay + count * 70, 140) : record.delay;
           // Start at the actual viewport, so a slow scroll cannot consume the
-          // whole effect offscreen. Passed sections and fast navigation stay
-          // still; ordinary late delivery can move without hiding the text.
-          const incoming = record.element.getBoundingClientRect().top >= 0;
-          enter(record, incoming && !motion.matches && !document.hidden && performance.now() >= skipUntil, delay);
+          // whole effect offscreen. Entries from either edge can move without
+          // hiding any content that has already been painted.
+          enter(record, true, delay);
         });
     }, {rootMargin: '0px', threshold: 0});
 
     records.forEach(record => {
       const bounds = record.element.getBoundingClientRect();
-      // The hero and any restored content are already painted. Leave them
-      // untouched; optional entrances belong only to incoming sections.
-      if (bounds.top < window.innerHeight) {
+      // Leave the hero and actually visible restored content untouched. A
+      // section above a deep-link viewport may still be unvisited: observe it
+      // so scrolling back up can show its first entrance.
+      if (record.element.closest('.hero') || (bounds.top < window.innerHeight && bounds.bottom > 0)) {
         enter(record, false);
       }
       else {

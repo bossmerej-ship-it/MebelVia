@@ -172,18 +172,42 @@ test('missing animation capabilities and observer initialization failure leave c
   }
 });
 
-test('already visible or passed content stays painted and Hanna scene nodes are never observed', () => {
+test('restored visible content stays painted while unvisited sections above remain pending', () => {
   const f = fixture({ scroll: 2000 });
   assert.equal(f.effects.length, 0);
-  for (const element of [f.heroTitle, f.heading, f.track, ...f.cards]) {
+  for (const element of [f.heroTitle, f.track, ...f.cards]) {
     assert.equal(element.dataset.revealState, 'done');
     assert.equal(f.observers[0].observed.has(element), false);
   }
+  assert.equal(f.heading.dataset.revealState, 'pending');
+  assert.equal(f.observers[0].observed.has(f.heading), true);
   for (const element of [f.heroImage, f.hanna, f.fallback]) {
     assert.equal(element.dataset.revealState, undefined);
     assert.equal(f.observers[0].observed.has(element), false);
   }
   assertNaturalStyles(f.heroTitle, f.heading, f.hanna, f.fallback);
+});
+
+test('a deep reload preserves first entrances above the viewport when scrolling back up', () => {
+  const f = fixture({ scroll: 3600, hash: '#faq', navigationType: 'reload' });
+  for (const element of [f.heading, f.track, f.deliveryGroup]) {
+    assert.equal(element.dataset.revealState, 'pending');
+    assert.equal(f.observers[0].observed.has(element), true);
+  }
+  assert.ok(f.rows.every(row => row.dataset.revealState === 'done'), 'answers already visible after reload stay still');
+  assert.equal(f.effects.length, 0);
+  // A slow upward gesture exposes the bottom of the delivery group first.
+  f.scroll(3300, 160);
+  assert.ok(f.deliveryGroup.getBoundingClientRect().top < 0);
+  assert.ok(f.deliveryGroup.getBoundingClientRect().bottom > 0);
+  f.enter(f.deliveryGroup);
+  assert.equal(f.effects.length, 2);
+  assert.equal(f.deliveryCopy.dataset.revealState, 'running');
+  assert.equal(f.image.dataset.revealState, 'running');
+  assert.ok(f.effects.every(({frames}) => frames.every(frame => frame.opacity === 1)));
+  f.enter(f.deliveryGroup);
+  assert.equal(f.effects.length, 2, 'revisiting still must not replay the pair');
+  assertNaturalStyles(f.deliveryCopy, f.image, f.heading);
 });
 
 test('a fresh opening leaves the already painted hero and its controls visible', () => {
@@ -298,12 +322,18 @@ test('late on-screen groups move without fading out and passed groups stay still
     assertNaturalStyles(...f.cards, f.deliveryCopy, f.image);
   }
   const passed = fixture();
-  passed.track.top = passed.deliveryGroup.top = -100;
+  passed.track.top = -600;
+  passed.deliveryGroup.top = -100;
   passed.enter(passed.track, passed.deliveryGroup);
   assert.equal(passed.effects.length, 0);
-  assert.ok(passed.cards.every(card => card.dataset.revealState === 'done'));
-  assert.equal(passed.deliveryCopy.dataset.revealState, 'done');
-  assert.equal(passed.image.dataset.revealState, 'done');
+  assert.equal(passed.track.dataset.revealState, 'pending');
+  assert.equal(passed.deliveryGroup.dataset.revealState, 'pending');
+  assert.ok(passed.cards.every(card => card.dataset.revealState === undefined));
+  assert.equal(passed.deliveryCopy.dataset.revealState, undefined);
+  assert.equal(passed.image.dataset.revealState, undefined);
+  passed.track.top = passed.deliveryGroup.top = 799;
+  passed.enter(passed.track, passed.deliveryGroup);
+  assert.equal(passed.effects.length, 5, 'a late passed callback cannot consume the next real entry');
 });
 
 test('text, actions and card batches use bounded motion without replacing hover transforms', () => {
@@ -416,7 +446,7 @@ test('fast vertical scrolling lets current effects settle naturally and skips ne
   assert.equal(f.effects[0].animation.cancelled, false);
   assert.equal(f.heading.dataset.revealState, 'running');
   f.enter(f.description);
-  assert.equal(f.description.dataset.revealState, 'done');
+  assert.equal(f.description.dataset.revealState, 'pending');
   assert.equal(f.effects.length, 1);
   f.effects[0].animation.finish();
   await Promise.resolve();
@@ -450,7 +480,7 @@ test('rapid wheel ticks are classified by their accumulated travel within the sh
   f.scroll(620, 16);
   assert.equal(f.effects[0].animation.cancelled, false);
   f.enter(f.description);
-  assert.equal(f.description.dataset.revealState, 'done');
+  assert.equal(f.description.dataset.revealState, 'pending');
   assert.equal(f.effects.length, 1);
   f.advance(300);
   f.action.top = 2000;
@@ -483,6 +513,67 @@ test('section links and hash targets become usable immediately, including the wh
   f.enter(f.track);
   assert.equal(f.effects.length, 1);
   assert.doesNotThrow(() => f.hash('#%invalid'));
+});
+
+test('a #top jump settles the hero without consuming unseen sections inside main', () => {
+  const f = fixture({ scroll: 3600, hash: '#faq', navigationType: 'reload' });
+  f.hash('#top');
+  assert.equal(f.heroTitle.dataset.revealState, 'done');
+  for (const element of [f.heading, f.track, f.deliveryGroup]) {
+    assert.equal(element.dataset.revealState, 'pending');
+    assert.equal(f.observers[0].observed.has(element), true);
+  }
+  // After native anchor navigation settles, the next ordinary visit can play.
+  f.scroll(0, 1000);
+  f.advance(300);
+  f.heading.top = 799;
+  f.enter(f.heading);
+  assert.equal(f.heading.dataset.revealState, 'running');
+  assert.equal(f.effects.length, 1);
+  assert.ok(f.cards.every(card => card.dataset.revealState !== 'done'), 'the distant catalogue has not been consumed by #top');
+  assertNaturalStyles(f.heroTitle, f.heading, ...f.cards);
+});
+
+test('callbacks crossed during #top transit preserve unseen catalogue entrances', () => {
+  const f = fixture({ scroll: 3600, hash: '#faq', navigationType: 'reload' });
+  f.hash('#top');
+  // Native smooth scrolling crosses both catalogues while the anchor guard is
+  // active. The callbacks must skip motion without marking them as visited.
+  f.scroll(2400, 100);
+  f.enter(f.mattressTitle, ...f.mattressCards);
+  f.scroll(1800, 100);
+  f.enter(f.track);
+  assert.equal(f.effects.length, 0);
+  assert.equal(f.track.dataset.revealState, 'pending');
+  assert.equal(f.mattressTitle.dataset.revealState, 'pending');
+  assert.ok(f.mattressCards.every(card => card.dataset.revealState === 'pending'));
+  assert.equal(f.observers[0].observed.has(f.track), true);
+  assert.ok(f.cards.every(card => card.dataset.revealState === undefined));
+  f.scroll(0, 800);
+  f.advance(300);
+  f.track.top = 799;
+  f.enter(f.track);
+  assert.equal(f.effects.length, 3);
+  assert.equal(f.track.dataset.revealState, 'done');
+  f.mattressTitle.top = 799;
+  f.enter(f.mattressTitle);
+  assert.equal(f.mattressTitle.dataset.revealState, 'running');
+  assert.equal(f.effects.length, 4);
+  assertNaturalStyles(f.track, ...f.cards, f.mattressTitle);
+});
+
+test('a hidden observer callback cannot consume an unseen entrance', () => {
+  const f = fixture();
+  f.visible(false);
+  f.enter(f.heading);
+  assert.equal(f.heading.dataset.revealState, 'pending');
+  assert.equal(f.effects.length, 0);
+  assert.equal(f.observers[0].observed.has(f.heading), true);
+  f.visible(true);
+  f.heading.top = 799;
+  f.enter(f.heading);
+  assert.equal(f.heading.dataset.revealState, 'running');
+  assert.equal(f.effects.length, 1);
 });
 
 test('focus or pointer input finishes a containing reveal and prevents a pending action from hiding', () => {
