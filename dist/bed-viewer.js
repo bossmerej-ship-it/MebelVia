@@ -30,6 +30,10 @@ function clearLoading() {
 function showPhoto() {
   requested = false;
   clearLoading();
+  // CSS visibility does not change model-viewer's renderer visibility. Keep
+  // the cached model behind its native poster so it stops competing for GPU
+  // work (and extra canvas copies) while the photograph is showing.
+  viewer.showPoster?.();
   stage.dataset.state = 'photo';
   open.hidden = false;
   close.hidden = true;
@@ -41,7 +45,13 @@ function showPhoto() {
 function modelReady() {
   clearLoading();
   failed = false;
-  if (!requested) return;
+  if (!requested) {
+    // Loading may finish after the visitor has returned to the photograph.
+    // reveal="auto" dismisses the poster on completion, so block it again.
+    viewer.showPoster?.();
+    return;
+  }
+  viewer.dismissPoster();
   stage.dataset.state = 'model';
   open.hidden = true;
   close.hidden = false;
