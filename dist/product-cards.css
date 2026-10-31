@@ -1,0 +1,174 @@
+@layer responsive {
+  :is(#bed-grid, #mattress-grid) > .product-card {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    border: 1px solid #e4ded5;
+    border-radius: 18px;
+    background: #fff;
+    box-shadow: none;
+    transform: none;
+    transition: border-color .2s ease, box-shadow .2s ease;
+  }
+
+  :is(#bed-grid, #mattress-grid) .photo-button {
+    aspect-ratio: 4 / 3;
+    background: #fff;
+  }
+
+  #bed-grid :is(.product-photo, .product-secondary) {
+    object-fit: contain;
+    padding: clamp(18px, 1.8vw, 28px);
+  }
+
+  #mattress-grid :is(.product-photo, .product-secondary) {
+    padding: 0;
+    max-width: calc(100% - 44px);
+    max-height: calc(100% - 44px);
+  }
+
+  :is(#bed-grid, #mattress-grid) .product-info {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    padding: clamp(20px, 1.8vw, 28px);
+    border-top: 1px solid #f0ebe3;
+    background: #faf8f4;
+  }
+
+  :is(#bed-grid, #mattress-grid) .product-info h3 {
+    min-height: 0;
+    font-size: clamp(21px, 1.7vw, 26px);
+    font-weight: 700;
+    line-height: 1.2;
+    letter-spacing: -.035em;
+    color: var(--ink);
+  }
+
+  :is(#bed-grid, #mattress-grid) :is(.product-caption, .product-meta) {
+    min-height: 2.9em;
+    margin: 10px 0 0;
+    font-size: 14px;
+    line-height: 1.45;
+    color: #736e66;
+  }
+
+  :is(#bed-grid, #mattress-grid) .product-card-footer {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: auto;
+    padding-top: 20px;
+    border-top: 1px solid #e8e1d7;
+  }
+
+  :is(#bed-grid, #mattress-grid) .product-info > :is(.product-caption, .product-meta) {
+    margin-bottom: 18px;
+  }
+
+  #bed-grid .product-price {
+    flex: 1 0 auto;
+    min-height: 0;
+    margin: 0;
+    font-size: clamp(20px, 1.6vw, 24px);
+    font-weight: 700;
+    line-height: 1.25;
+    letter-spacing: -.035em;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    color: var(--ink);
+  }
+
+  #bed-grid .product-price-request {
+    font-size: clamp(15px, 1.2vw, 18px);
+    font-weight: 500;
+    letter-spacing: -.015em;
+    color: #5d584f;
+  }
+
+  :is(#bed-grid, #mattress-grid) .details-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    align-self: auto;
+    gap: 7px;
+    min-height: 46px;
+    margin: 0;
+    padding: 6px 7px 6px 13px;
+    border: 1px solid #ded4c6;
+    border-radius: 999px;
+    background: #fff;
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1.2;
+    white-space: nowrap;
+    color: var(--ink);
+    transition: border-color .2s ease, background-color .2s ease;
+  }
+
+  :is(#bed-grid, #mattress-grid) .details-button .icon {
+    width: 30px;
+    height: 30px;
+    padding: 6px;
+    border-radius: 50%;
+    background: #fff0df;
+    color: #c75c08;
+  }
+
+  :is(#bed-grid, #mattress-grid) .details-button:hover span {
+    text-decoration: none;
+  }
+
+  #mattress-grid .firmness {
+    align-self: flex-start;
+    margin-bottom: 14px;
+    padding: 6px 10px;
+    border: 1px solid #e8dfd2;
+    border-radius: 999px;
+    background: #fff;
+    color: #6c5e4b;
+    font-size: 11px;
+    font-weight: 500;
+    line-height: 1.4;
+  }
+
+  #mattress-grid .product-example {
+    flex: 1 1 100px;
+    margin: 0;
+    color: #736e66;
+    font-size: 12px;
+    line-height: 1.4;
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    :is(#bed-grid, #mattress-grid) > .product-card:hover {
+      border-color: #c9b69b;
+      box-shadow: 0 8px 22px #43311a0a;
+    }
+
+    :is(#bed-grid, #mattress-grid) .details-button:hover {
+      border-color: #d29b68;
+      background: #fff7ec;
+    }
+  }
+
+  @media (max-width: 560px) {
+    :is(#bed-grid, #mattress-grid) > .product-card { border-radius: 16px; }
+    :is(#bed-grid, #mattress-grid) .product-info { padding: 20px; }
+    :is(#bed-grid, #mattress-grid) .product-info h3 { font-size: 22px; }
+    #bed-grid .product-price { font-size: 21px; }
+    #bed-grid .product-price-request { font-size: 15px; }
+  }
+
+  @media (max-width: 360px) {
+    :is(#bed-grid, #mattress-grid) .product-card-footer { align-items: stretch; }
+    :is(#bed-grid, #mattress-grid) .details-button { flex: 1 0 100%; justify-content: space-between; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    :is(#bed-grid, #mattress-grid) > .product-card,
+    :is(#bed-grid, #mattress-grid) .details-button { transition: none; }
+  }
+}

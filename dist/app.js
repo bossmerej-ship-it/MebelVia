@@ -12,11 +12,19 @@ let lastTrigger;
 function renderCategory(category) {
   const visible = products.filter(product => product.category === category);
   document.querySelector(`#${category}-grid`).innerHTML = visible.map(p => `
-    <article class="product-card${p.image ? '' : ' product-card-text'}">
+    <article class="product-card product-card-${p.category}${p.image ? '' : ' product-card-text'}">
       ${productPhotos(p)}
-      <div class="product-info">${p.firmnessLabel ? `<span class="firmness">Жёсткость: ${escapeHTML(p.firmnessLabel)}</span>` : ''}<h3>${p.name}</h3><p class="product-meta">${p.summary}</p>
-        ${p.isExample ? '<p class="product-example">Пример для подбора</p>' : ''}
-        <button type="button" class="details-button" data-product="${p.id}" aria-label="Подробнее о товаре: ${escapeHTML(p.name)}"><span>Подробнее</span>${icon('arrow')}</button>
+      <div class="product-info">
+        ${p.firmnessLabel ? `<span class="firmness">Жёсткость: ${escapeHTML(p.firmnessLabel)}</span>` : ''}
+        <h3>${escapeHTML(p.name)}</h3>
+        ${p.category === 'bed'
+          ? `<p class="product-caption">${escapeHTML(p.specs.find(([key]) => key === 'Изголовье')?.[1] || '')}</p>`
+          : `<p class="product-meta">${escapeHTML(p.summary)}</p>`}
+        <div class="product-card-footer">
+          ${p.category === 'bed' ? `<p class="product-meta product-price${p.summary === 'Цена по запросу' ? ' product-price-request' : ''}">${escapeHTML(p.summary)}</p>` : ''}
+          ${p.isExample ? '<p class="product-example">Пример для подбора</p>' : ''}
+          <button type="button" class="details-button" data-product="${p.id}" aria-label="Подробнее о товаре: ${escapeHTML(p.name)}"><span>Подробнее</span>${icon('arrow')}</button>
+        </div>
       </div>
     </article>`).join('');
   initProductPhotos(document.querySelector(`#${category}-grid`));
