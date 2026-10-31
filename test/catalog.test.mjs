@@ -19,8 +19,8 @@ test('catalogue photographs are shown for beds and mattresses, without a second-
   const markup = productPhotos(bed);
   assert.ok(markup.includes('src="assets/catalog/violetta.svg"'));
   assert.ok(!markup.includes('photo-toggle'));
-  assert.ok(productPhotos(mattress).includes('src="assets/spring-mattress-alternate.webp"'));
-  assert.ok(productPhotos(mattress,true).includes('src="assets/spring-mattress-alternate.webp"'));
+  assert.ok(productPhotos(mattress).includes(`src="${mattress.image}"`));
+  assert.ok(productPhotos(mattress,true).includes(`src="${mattress.image}"`));
   assert.ok(!productPhotos(mattress).includes('photo-toggle'));
   const gallery = productPhotos({...bed,alternateImage:'assets/catalog/violetta-detail.svg'});
   assert.ok(gallery.includes('data-src="assets/catalog/violetta-detail.svg"'));
