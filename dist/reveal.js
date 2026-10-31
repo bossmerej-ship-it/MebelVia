@@ -48,12 +48,14 @@ export function initReveals() {
   }
 
   function animate(element, kind, delay) {
-    const image = kind === 'image';
     const horizontal = kind === 'delivery-copy' || kind === 'delivery-truck';
     const distance = kind === 'action' || kind === 'row' ? 12 : 16;
     const offset = horizontal ? `${kind === 'delivery-copy' ? -24 : 24}px 0` : `0 ${distance}px`;
-    const from = image ? {opacity: 0} : {opacity: 0, translate: offset};
-    const to = image ? {opacity: 1} : {opacity: 1, translate: '0 0'};
+    // Observer delivery happens after a frame has been painted. Move the
+    // incoming element gently without making already readable content fade
+    // out first. Nothing is hidden while waiting for the observer.
+    const from = {opacity: 1, translate: offset};
+    const to = {opacity: 1, translate: '0 0'};
     try {
       // Individual translate composes with the existing card hover transform.
       const animation = element.animate([from, to], {
@@ -200,12 +202,13 @@ export function initReveals() {
           const count = counts.get(record.kind) || 0;
           if (grouped) counts.set(record.kind, count + 1);
           const delay = grouped ? Math.min(record.delay + count * 70, 140) : record.delay;
-          // Start while still below the screen. If observer delivery is late,
-          // never turn already-painted content transparent to restart it.
-          const belowScreen = record.element.getBoundingClientRect().top >= window.innerHeight;
-          enter(record, belowScreen && !motion.matches && !document.hidden && performance.now() >= skipUntil, delay);
+          // Start at the actual viewport, so a slow scroll cannot consume the
+          // whole effect offscreen. Passed sections and fast navigation stay
+          // still; ordinary late delivery can move without hiding the text.
+          const incoming = record.element.getBoundingClientRect().top >= 0;
+          enter(record, incoming && !motion.matches && !document.hidden && performance.now() >= skipUntil, delay);
         });
-    }, {rootMargin: '0px 0px 120px', threshold: 0});
+    }, {rootMargin: '0px', threshold: 0});
 
     records.forEach(record => {
       const bounds = record.element.getBoundingClientRect();

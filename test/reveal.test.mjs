@@ -256,38 +256,54 @@ test('the optional module starts at interactive readiness and waits only while t
   assert.equal(loading.observers.length, 1);
 });
 
-test('scroll reveals begin just before entry and never reset already visible content', () => {
+test('slow scroll entrances start at the viewport instead of being spent offscreen', () => {
   const f = fixture();
-  assert.equal(f.observers[0].options.rootMargin, '0px 0px 120px');
+  assert.equal(f.observers[0].options.rootMargin, '0px');
   assert.equal(f.observers[0].options.threshold, 0);
   assert.equal(f.observers[0].observed.has(f.heading), true);
   assert.equal(f.heading.dataset.revealState, 'pending');
+  // Waiting while the next heading is below the viewport cannot consume its
+  // entrance. The exact-viewport observer delivers only once it comes in.
   f.heading.top = 820;
+  f.advance(1500);
+  assert.equal(f.effects.length, 0);
+  assert.equal(f.heading.dataset.revealState, 'pending');
+  f.heading.top = 799;
   f.enter(f.heading);
   assert.equal(f.heading.dataset.revealState, 'running');
   assert.equal(f.effects[0].options.duration, 600);
-  f.description.top = 799;
+  // A late callback keeps all painted text visible while moving it softly.
+  f.description.top = 740;
   f.enter(f.description);
-  assert.equal(f.description.dataset.revealState, 'done');
-  assert.equal(f.effects.length, 1, 'late observer delivery cannot hide painted text');
+  assert.equal(f.description.dataset.revealState, 'running');
+  assert.equal(f.effects.length, 2);
+  assert.ok(f.effects.every(({frames}) => frames.every(frame => frame.opacity === 1)), 'observer delivery must never turn readable text transparent');
   assertNaturalStyles(f.description);
 });
 
-test('late delivery of large card and delivery groups leaves every child painted', () => {
-  for (const top of [799, 400, -100]) {
+test('late on-screen groups move without fading out and passed groups stay still', () => {
+  for (const top of [799, 400]) {
     const f = fixture();
     f.track.top = top;
     f.deliveryGroup.top = top;
     f.enter(f.track, f.deliveryGroup);
-    assert.equal(f.effects.length, 0);
-    assert.ok(f.cards.every(card => card.dataset.revealState === 'done'));
-    assert.equal(f.deliveryCopy.dataset.revealState, 'done');
-    assert.equal(f.image.dataset.revealState, 'done');
+    assert.equal(f.effects.length, 5);
+    assert.ok(f.effects.every(({frames}) => frames.every(frame => frame.opacity === 1)));
+    assert.ok(f.cards.every(card => card.dataset.revealState === 'done' || card.dataset.revealState === 'running'));
+    assert.equal(f.deliveryCopy.dataset.revealState, 'running');
+    assert.equal(f.image.dataset.revealState, 'running');
     f.track.top = f.deliveryGroup.top = 900;
     f.enter(f.track, f.deliveryGroup);
-    assert.equal(f.effects.length, 0, 'skipped entries remain one-shot');
+    assert.equal(f.effects.length, 5, 'entrances remain one-shot');
     assertNaturalStyles(...f.cards, f.deliveryCopy, f.image);
   }
+  const passed = fixture();
+  passed.track.top = passed.deliveryGroup.top = -100;
+  passed.enter(passed.track, passed.deliveryGroup);
+  assert.equal(passed.effects.length, 0);
+  assert.ok(passed.cards.every(card => card.dataset.revealState === 'done'));
+  assert.equal(passed.deliveryCopy.dataset.revealState, 'done');
+  assert.equal(passed.image.dataset.revealState, 'done');
 });
 
 test('text, actions and card batches use bounded motion without replacing hover transforms', () => {
@@ -300,7 +316,7 @@ test('text, actions and card batches use bounded motion without replacing hover 
     assert.equal(options.fill, 'backwards');
     assert.match(options.easing, /cubic-bezier/);
     assert.ok(frames.every(frame => !('transform' in frame) && !('scale' in frame) && !('rotate' in frame)));
-    assert.equal(frames[0].opacity, 0);
+    assert.equal(frames[0].opacity, 1);
     assert.equal(frames.at(-1).opacity, 1);
     if ('translate' in frames[0]) {
       const distance = Number(frames[0].translate.match(/^0 (\d+)px$/)?.[1]);
@@ -326,8 +342,8 @@ test('delivery enters once as a synchronized horizontal pair with opposite direc
   assert.equal(f.effects.length, 2);
   const copy = f.effects.find(effect => effect.element === f.deliveryCopy);
   const truck = f.effects.find(effect => effect.element === f.image);
-  assert.deepEqual(Array.from(copy.frames, frame => ({ ...frame })), [{ opacity: 0, translate: '-24px 0' }, { opacity: 1, translate: '0 0' }]);
-  assert.deepEqual(Array.from(truck.frames, frame => ({ ...frame })), [{ opacity: 0, translate: '24px 0' }, { opacity: 1, translate: '0 0' }]);
+  assert.deepEqual(Array.from(copy.frames, frame => ({ ...frame })), [{ opacity: 1, translate: '-24px 0' }, { opacity: 1, translate: '0 0' }]);
+  assert.deepEqual(Array.from(truck.frames, frame => ({ ...frame })), [{ opacity: 1, translate: '24px 0' }, { opacity: 1, translate: '0 0' }]);
   for (const effect of [copy, truck]) {
     assert.equal(effect.options.duration, 600);
     assert.equal(effect.options.delay, 0);
