@@ -46,7 +46,8 @@ function fixture(reduced = false, options = {}) {
   }
   const section = new Element(), viewer = new Element(), photo = new Element();
   const sticky = { clientHeight: 1000, getBoundingClientRect: () => ({top:0,bottom:1000}) };
-  const visual = {top:options.visualTop ?? 0,bottom:options.visualBottom ?? 1000,
+  const hasVisualBounds = options.visualTop !== undefined || options.visualBottom !== undefined;
+  const visual = {top:options.visualTop ?? 2200,bottom:options.visualBottom ?? 3200,
     getBoundingClientRect() {return {top:this.top,bottom:this.bottom};}};
   section.dataset.liftState = 'photo';
   section.top = options.sectionTop ?? 0;
@@ -57,6 +58,7 @@ function fixture(reduced = false, options = {}) {
   const document = new EventTarget();
   document.querySelector = () => section;
   document.hidden = options.hidden ?? false;
+  document.readyState = options.startupPending ? 'interactive' : 'complete';
   const window = new EventTarget();
   window.innerWidth = 1440;
   window.innerHeight = 1000;
@@ -85,13 +87,20 @@ function fixture(reduced = false, options = {}) {
   const motion = new EventTarget();
   motion.matches = reduced;
   const narrow = { matches: false };
-  const frames = new Map(), timers = new Map();
-  let frameId = 0, timerId = 0, intersect, intersectionOptions, observedTarget, now = 0;
+  const frames = new Map(), timers = new Map(), idle = new Map();
+  let frameId = 0, timerId = 0, idleId = 0, intersect, warmIntersect, intersectionOptions, observedTarget, now = 0;
   class IntersectionObserver {
-    constructor(callback, configuration) { intersect = callback; intersectionOptions = configuration; }
+    constructor(callback, configuration) {
+      if (configuration.rootMargin === '0px') {intersect = callback; intersectionOptions = configuration;}
+      else warmIntersect = callback;
+    }
     observe(target) { observedTarget = target; }
   }
   if (!options.noObserver) window.IntersectionObserver = IntersectionObserver;
+  if (!options.noIdle) {
+    window.requestIdleCallback = (callback, configuration) => {idle.set(++idleId,{callback,configuration});return idleId;};
+    window.cancelIdleCallback = id => idle.delete(id);
+  }
   let registered = !options.deferImport, resolveImport;
   const pendingImport = new Promise(resolve => {resolveImport = () => {registered = true; resolve();};});
   const source = readFileSync(new URL('../dist/hanna-lift.js', import.meta.url), 'utf8')
@@ -117,17 +126,23 @@ function fixture(reduced = false, options = {}) {
     for (let i = 0; frames.size && i < 120; i++) flush();
     assert.equal(frames.size, 0, 'the damper must settle without an idle frame loop');
   };
+  const finishStartup = () => {flush();flush();};
   const waitForVisit = () => {
-    now += 160;
-    for (const [id, callback] of [...timers]) if (callback.delay === 160) {timers.delete(id);callback();}
+    for (const [id, item] of [...idle]) {idle.delete(id);item.callback();}
+    for (const [id, callback] of [...timers]) if (callback.delay === 300) {timers.delete(id);callback();}
   };
+  if (!options.startupPending && !options.hidden) finishStartup();
   return {
-    section, viewer, photo, catalogue, visual, window, document, motion, frames, timers, flush, settle, poses,
+    section, viewer, photo, catalogue, visual, window, document, motion, frames, timers, idle, flush, settle, poses,
     intersectionOptions, observedTarget,
     advance: elapsed => {now += elapsed;}, resolveImport,
     reads: () => boundsReads,
-    near(value, wait = true) { intersect([{ isIntersecting: value }]); if (wait) waitForVisit(); },
-    waitForVisit,
+    near(value) {
+      if (!hasVisualBounds) {visual.top = value ? 0 : 2200; visual.bottom = value ? 1000 : 3200;}
+      intersect([{ isIntersecting: value }]);
+    },
+    warm() {warmIntersect([{isIntersecting:true}]);},
+    waitForVisit, finishStartup,
     loaded: () => viewer.dispatchEvent(new Event('load')),
     narrow: value => { narrow.matches = value; window.dispatchEvent(new Event('resize')); },
     preference: value => { motion.matches = value; motion.dispatchEvent(new Event('change')); waitForVisit(); }
@@ -174,53 +189,114 @@ test('asset loading is lazy and failure keeps the accessible photo in normal flo
 });
 
 test('brief restoration intersections do not start WebGL or download a model', () => {
-  const f = fixture();
-  f.near(true, false);
+  const f = fixture(false, {startupPending:true});
+  f.near(true);
   assert.equal(f.viewer.getAttribute('src'), null);
   assert.equal(f.section.dataset.liftState, 'photo');
-  f.near(false, false);
+  f.near(false);
+  f.window.dispatchEvent(new Event('pageshow'));
+  f.finishStartup();
   f.waitForVisit();
-  assert.equal(f.viewer.getAttribute('src'), null, 'leaving before the dwell cancels initialization');
+  assert.equal(f.viewer.getAttribute('src'), null, 'restoration below the scene cancels transient preparation');
   assert.equal(f.timers.size, 0);
   f.near(true);
-  assert.equal(f.viewer.getAttribute('src'), 'assets/models/hanna.glb', 'a sustained visit still activates 3D');
+  assert.equal(f.viewer.getAttribute('src'), 'assets/models/hanna.glb', 'a visible visit expedites preparation');
 });
 
-test('continuous scrolling through the canvas waits for a real pause before loading', () => {
-  const f = fixture();
-  f.near(true, false);
+test('ahead-of-screen preparation is bounded and continuous scrolling cannot starve it', () => {
+  const f = fixture(false, {visualTop:1400,visualBottom:2100});
+  assert.equal(f.viewer.getAttribute('src'), null);
+  const firstIdle = [...f.idle.keys()][0];
+  assert.equal(f.idle.get(firstIdle).configuration.timeout,500);
   for (let index = 0; index < 30; index++) {
     f.advance(16);
     f.window.dispatchEvent(new Event('scroll'));
-    assert.equal(f.viewer.getAttribute('src'), null, 'crossing the scene must not initialize the model');
+    f.flush();
+    assert.equal([...f.idle.keys()][0], firstIdle, 'scrolling must not replace the preparatory deadline');
   }
-  f.near(false, false);
   f.waitForVisit();
-  assert.equal(f.viewer.getAttribute('src'), null, 'a smooth link passing the whole scene stays dormant');
-  f.near(true, false);
+  assert.equal(f.viewer.getAttribute('src'), 'assets/models/hanna.glb', 'prepare before the canvas enters the screen');
   f.window.dispatchEvent(new Event('scroll'));
-  f.waitForVisit();
-  assert.equal(f.viewer.getAttribute('src'), 'assets/models/hanna.glb', 'a quiet visit still loads');
-  f.window.dispatchEvent(new Event('scroll'));
+  f.flush();
   f.waitForVisit();
   assert.equal(f.viewer.assetRequests, 1, 'subsequent scrolls must not restart the requested asset');
+  f.visual.top = 0;
+  f.visual.bottom = 1000;
+  f.near(true);
   f.loaded();
   f.section.top = -700;
   f.window.dispatchEvent(new Event('scroll')); f.settle();
   assert.ok(Math.abs(f.viewer.currentTime - .499995) < .000001, 'the loaded mechanism still follows scrolling');
 });
 
-test('scrolling during a delayed viewer import postpones the GLB request until quiet', async () => {
-  const f = fixture(false, {deferImport:true});
-  f.near(true);
+test('leaving the ahead range cancels pending preparation before any import', () => {
+  const f = fixture(false, {visualTop:1400,visualBottom:2100});
+  assert.equal(f.idle.size,1);
+  f.visual.top = -1800;
+  f.visual.bottom = -100;
+  f.warm();
+  f.waitForVisit();
+  assert.equal(f.idle.size,0);
+  assert.equal(f.viewer.getAttribute('src'),null);
+  assert.equal(f.section.dataset.liftState,'photo');
+});
+
+test('missing requestIdleCallback uses one bounded timer instead of a scroll debounce', () => {
+  const f = fixture(false, {visualTop:1400,visualBottom:2100,noIdle:true});
+  const pending = [...f.timers.entries()].find(([,callback]) => callback.delay===300);
+  assert.ok(pending);
+  for(let i=0;i<20;i++) {f.window.dispatchEvent(new Event('scroll'));f.flush();}
+  assert.equal(f.timers.get(pending[0]),pending[1],'input cannot move the original timer');
+  f.waitForVisit();
+  assert.equal(f.viewer.getAttribute('src'),'assets/models/hanna.glb');
+  assert.equal(f.viewer.assetRequests,1);
+});
+
+test('history restoration cancels old ahead work and resamples the new position', () => {
+  const f = fixture(false, {visualTop:1400,visualBottom:2100});
+  f.window.dispatchEvent(new Event('pagehide'));
+  assert.equal(f.idle.size,0);
+  f.visual.top = -1800;
+  f.visual.bottom = -100;
+  f.window.dispatchEvent(new Event('pageshow'));
+  f.waitForVisit();
+  assert.equal(f.viewer.getAttribute('src'),null);
+  f.finishStartup();
+  f.waitForVisit();
+  assert.equal(f.viewer.getAttribute('src'),null);
+  assert.equal(f.frames.size,0,'restoration must not leave a permanent frame loop');
+});
+
+test('reduced motion prevents ahead downloads and cancels a queued idle slot', () => {
+  const initial = fixture(true,{visualTop:1400,visualBottom:2100});
+  initial.waitForVisit();
+  assert.equal(initial.viewer.getAttribute('src'),null);
+  assert.equal(initial.idle.size,0);
+  const changed = fixture(false,{visualTop:1400,visualBottom:2100});
+  assert.equal(changed.idle.size,1);
+  changed.preference(true);
+  changed.waitForVisit();
+  assert.equal(changed.viewer.getAttribute('src'),null);
+  assert.equal(changed.idle.size,0);
+});
+
+test('leaving the warm range during a delayed viewer import cancels GLB initialization', async () => {
+  const f = fixture(false, {deferImport:true,visualTop:1400,visualBottom:2100});
+  f.waitForVisit();
   assert.equal(f.section.dataset.liftState, 'loading');
   assert.equal(f.viewer.getAttribute('src'), null);
   f.advance(40);
+  f.visual.top = -1500;
+  f.visual.bottom = -500;
   f.window.dispatchEvent(new Event('scroll'));
+  f.flush();
   f.resolveImport();
   await new Promise(resolve => setImmediate(resolve));
-  assert.equal(f.viewer.getAttribute('src'), null, 'an imported viewer must not compile a model during the gesture');
+  assert.equal(f.viewer.getAttribute('src'), null, 'the imported viewer must recheck the current destination');
   assert.equal(f.section.dataset.liftState, 'photo');
+  f.visual.top = 1400;
+  f.visual.bottom = 2100;
+  f.warm();
   f.waitForVisit();
   assert.equal(f.viewer.getAttribute('src'), 'assets/models/hanna.glb');
   assert.equal(f.viewer.assetRequests, 1);
@@ -232,10 +308,10 @@ test('background loads wait for visibility and current scene intersection', () =
   assert.equal(f.viewer.getAttribute('src'), null);
   f.document.hidden = false;
   f.document.dispatchEvent(new Event('visibilitychange'));
+  f.finishStartup();
   f.waitForVisit();
   assert.equal(f.viewer.getAttribute('src'), 'assets/models/hanna.glb');
-  const leave = fixture();
-  leave.near(true, false);
+  const leave = fixture(false, {visualTop:1400,visualBottom:2100});
   leave.document.hidden = true;
   leave.document.dispatchEvent(new Event('visibilitychange'));
   leave.waitForVisit();
@@ -243,11 +319,16 @@ test('background loads wait for visibility and current scene intersection', () =
   assert.equal(leave.timers.size, 0);
 });
 
-test('a mobile heading in view cannot trigger a still-offscreen 3D canvas', () => {
-  const f = fixture(false, {visualTop:1200,visualBottom:1800});
-  f.near(true);
-  assert.equal(f.viewer.getAttribute('src'), null, 'recheck the visual bounds after the dwell, not the sticky text');
+test('a distant mobile canvas or a restored sliver above the catalogue stays dormant', () => {
+  const f = fixture(false, {visualTop:1800,visualBottom:2400});
+  f.warm();
+  f.waitForVisit();
+  assert.equal(f.viewer.getAttribute('src'), null, 'only prepare within the bounded ahead range');
   assert.equal(f.section.dataset.liftState, 'photo');
+  const behind = fixture(false, {visualTop:-900,visualBottom:100});
+  behind.near(true);
+  behind.waitForVisit();
+  assert.equal(behind.viewer.getAttribute('src'), null, 'a catalogue reload must not initialize a remnant behind it');
 });
 
 test('an edge-adjacent canvas can queue a new visit when its first pixels enter', () => {
@@ -255,26 +336,29 @@ test('an edge-adjacent canvas can queue a new visit when its first pixels enter'
   assert.equal(f.observedTarget, f.visual, 'observe the canvas area rather than the heading');
   assert.ok(f.intersectionOptions.threshold > 0 && f.intersectionOptions.threshold < .01,
     'zero-area intersections need a distinct threshold from actually visible pixels');
-  f.near(true);
-  assert.equal(f.viewer.getAttribute('src'), null, 'the initial touching edge must stay dormant');
+  assert.equal(f.viewer.getAttribute('src'), null, 'offscreen preparation waits for its bounded idle slot');
   f.visual.top = 999;
   f.near(true);
   assert.equal(f.viewer.getAttribute('src'), 'assets/models/hanna.glb');
+  assert.equal(f.idle.size,0,'actual visibility expedites and cancels the idle wait');
 });
 
 test('without IntersectionObserver the bed remains lazy and activates on a later visit', () => {
-  const f = fixture(false, {noObserver:true,visualTop:1200,visualBottom:1800});
+  const f = fixture(false, {noObserver:true,visualTop:1800,visualBottom:2400});
   assert.equal(f.viewer.getAttribute('src'), null);
   assert.equal(f.timers.size, 0);
-  f.visual.top = 900;
+  f.visual.top = 1400;
   f.window.dispatchEvent(new Event('scroll'));
-  assert.equal(f.viewer.getAttribute('src'), null, 'the dwell still applies');
-  f.visual.top = 1200;
+  f.flush();
+  assert.equal(f.viewer.getAttribute('src'), null, 'ahead preparation is still scheduled, not immediate');
+  f.visual.top = 1800;
   f.window.dispatchEvent(new Event('scroll'));
+  f.flush();
   f.waitForVisit();
   assert.equal(f.viewer.getAttribute('src'), null, 'a passing gesture must cancel loading');
   f.visual.top = 0;
   f.window.dispatchEvent(new Event('resize'));
+  f.flush();
   f.waitForVisit();
   assert.equal(f.viewer.getAttribute('src'), 'assets/models/hanna.glb');
   f.loaded();
@@ -283,9 +367,11 @@ test('without IntersectionObserver the bed remains lazy and activates on a later
   assert.ok(Math.abs(f.viewer.currentTime - .499995) < .000001);
   f.visual.top = -1800; f.visual.bottom = -100;
   f.window.dispatchEvent(new Event('scroll'));
+  f.flush();
   assert.equal(f.frames.size, 0);
   f.section.top = -1400;
   f.window.dispatchEvent(new Event('scroll'));
+  f.flush();
   assert.equal(f.frames.size, 0, 'the fallback must also stop offscreen GPU updates');
   f.visual.top = 0; f.visual.bottom = 1000;
   f.window.dispatchEvent(new Event('pageshow'));

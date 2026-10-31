@@ -21,8 +21,12 @@ export function initHannaLift() {
   let near = false;
   let frame = 0;
   let deadline;
-  let loadDelay;
-  let lastScrollAt = -Infinity;
+  let preparation = 0;
+  let preparationUsesIdle = false;
+  let preparationFrame = 0;
+  let startupFrame = 0;
+  let startupReady = false;
+  let fallbackVisibility;
   let lastProgress = -1;
   let targetProgress = 0;
   let targetDirty = true;
@@ -86,7 +90,9 @@ export function initHannaLift() {
   }
 
   function showPhoto(state) {
-    clearTimeout(loadDelay);
+    cancelPreparation();
+    cancelAnimationFrame(preparationFrame);
+    preparationFrame = 0;
     cancelFrame();
     changeLayout(() => {
       section.dataset.liftState = state;
@@ -203,12 +209,16 @@ export function initHannaLift() {
     }
     duration = viewer.duration;
     loaded = true;
-    window.removeEventListener('scroll', deferDuringScroll);
+    if (!fallbackVisibility) window.removeEventListener('scroll', schedulePreparation);
+    cancelPreparation();
+    cancelAnimationFrame(preparationFrame);
+    preparationFrame = 0;
     activate();
   }
 
   async function requestModel() {
-    if (requested || failed || motion.matches || !near || document.hidden) return;
+    if (requested || failed || !canPrepare()) return;
+    cancelPreparation();
     requested = true;
     section.dataset.liftState = 'loading';
     deadline = setTimeout(unavailable, 30000);
@@ -218,11 +228,10 @@ export function initHannaLift() {
         await import('./assets/vendor/model-viewer-4.4.0.min.js');
       }
       if (failed) return;
-      if (!near || document.hidden || motion.matches || performance.now() - lastScrollAt < 160) {
+      if (!canPrepare()) {
         requested = false;
         clearTimeout(deadline);
         section.dataset.liftState = 'photo';
-        queueModel();
         return;
       }
       viewer.setAttribute('src', viewer.dataset.src);
@@ -231,22 +240,75 @@ export function initHannaLift() {
     }
   }
 
-  function queueModel() {
-    clearTimeout(loadDelay);
-    if (requested || failed || motion.matches || !near || document.hidden) return;
-    // Passing the scene during a fast gesture or native restoration must not
-    // start GLB decoding and shader compilation. Wait for a brief pause in
-    // scrolling inside the real canvas, never a large preload area.
-    loadDelay = setTimeout(() => {
-      const bounds = visual.getBoundingClientRect();
-      if (bounds.top < window.innerHeight && bounds.bottom > 0) requestModel();
-    }, 160);
+  function inPreparationWindow(bounds) {
+    const height = window.innerHeight;
+    const lead = Math.min(600, height);
+    // Prepare ahead of the visitor, but ignore a small remnant above a restored
+    // catalogue. It should not initialize WebGL while the visitor reads beds.
+    return bounds.top < height + lead &&
+      (bounds.top >= 0 || bounds.bottom > Math.min(160, height * .2));
   }
 
-  function deferDuringScroll() {
-    if (loaded || failed) return;
-    lastScrollAt = performance.now();
-    queueModel();
+  function canPrepare() {
+    return startupReady && !motion.matches && !document.hidden &&
+      inPreparationWindow(visual.getBoundingClientRect());
+  }
+
+  function cancelPreparation() {
+    if (preparationUsesIdle) window.cancelIdleCallback?.(preparation);
+    else clearTimeout(preparation);
+    preparation = 0;
+  }
+
+  function queueModel() {
+    if (requested || failed || loaded) return;
+    if (!canPrepare()) {
+      cancelPreparation();
+      return;
+    }
+    // Actual visibility expedites an outstanding warm-up. Neither ordinary
+    // scrolling nor wheel inertia can restart its deadline indefinitely.
+    if (near) {
+      requestModel();
+      return;
+    }
+    if (preparation) return;
+    const prepare = () => {
+      preparation = 0;
+      requestModel();
+    };
+    preparationUsesIdle = typeof window.requestIdleCallback === 'function';
+    preparation = preparationUsesIdle
+      ? window.requestIdleCallback(prepare, {timeout: 500})
+      : setTimeout(prepare, 300);
+  }
+
+  function schedulePreparation() {
+    if ((loaded && !fallbackVisibility) || failed || preparationFrame || !startupReady || document.hidden) return;
+    preparationFrame = requestAnimationFrame(() => {
+      preparationFrame = 0;
+      if (fallbackVisibility) fallbackVisibility();
+      else queueModel();
+    });
+  }
+
+  function settleStartup() {
+    cancelAnimationFrame(startupFrame);
+    startupReady = false;
+    cancelPreparation();
+    cancelAnimationFrame(preparationFrame);
+    preparationFrame = 0;
+    if (document.hidden) return;
+    // Native fragment/history restoration completes before preparatory work.
+    // A transient top-of-page observer entry must not start a footer reload.
+    startupFrame = requestAnimationFrame(() => {
+      startupFrame = requestAnimationFrame(() => {
+        startupFrame = 0;
+        startupReady = true;
+        fallbackVisibility?.();
+        queueModel();
+      });
+    });
   }
 
   viewer.addEventListener('load', modelReady);
@@ -256,20 +318,38 @@ export function initHannaLift() {
     else if (!failed) {
       reserveLayout();
       if (loaded) activate();
-      else if (near) queueModel();
+      else queueModel();
     }
   });
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) {
-      clearTimeout(loadDelay);
+      cancelPreparation();
+      cancelAnimationFrame(preparationFrame);
+      preparationFrame = 0;
       cancelFrame();
     } else {
-      queueModel();
+      if (startupReady) queueModel();
+      else settleStartup();
       resume();
     }
   });
-  window.addEventListener('scroll', deferDuringScroll, {passive: true});
-  window.addEventListener('pageshow', resume);
+  window.addEventListener('scroll', schedulePreparation, {passive: true});
+  window.addEventListener('pageshow', () => {
+    if (loaded) {
+      startupReady = true;
+      fallbackVisibility?.();
+      resume();
+    }
+    else settleStartup();
+  });
+  window.addEventListener('pagehide', () => {
+    cancelPreparation();
+    cancelAnimationFrame(startupFrame);
+    cancelAnimationFrame(preparationFrame);
+    startupFrame = preparationFrame = 0;
+    startupReady = false;
+    cancelFrame();
+  });
 
   if (motion.matches) showPhoto('reduced');
   else reserveLayout();
@@ -283,15 +363,19 @@ export function initHannaLift() {
         queueModel();
         if (!wasNear) resume();
       } else {
-        clearTimeout(loadDelay);
         cancelFrame();
+        queueModel();
       }
     }, { rootMargin: '0px', threshold: .00001 });
     observer.observe(visual);
+    const warmObserver = new IntersectionObserver(() => queueModel(), {
+      rootMargin: '0px 0px 600px 0px', threshold: .00001
+    });
+    warmObserver.observe(visual);
   } else {
     // Retain lazy loading in browsers without IntersectionObserver. A single
     // initial bounds check could otherwise strand an initially offscreen bed.
-    const checkVisibility = () => {
+    fallbackVisibility = () => {
       const bounds = visual.getBoundingClientRect();
       const wasNear = near;
       near = bounds.top < window.innerHeight && bounds.bottom > 0;
@@ -299,15 +383,14 @@ export function initHannaLift() {
         queueModel();
         if (!wasNear) resume();
       } else {
-        clearTimeout(loadDelay);
         cancelFrame();
+        queueModel();
       }
     };
-    window.addEventListener('scroll', checkVisibility, {passive: true});
-    window.addEventListener('resize', checkVisibility, {passive: true});
-    window.addEventListener('pageshow', checkVisibility);
-    checkVisibility();
+    window.addEventListener('resize', schedulePreparation, {passive: true});
+    fallbackVisibility();
   }
+  if (document.readyState === 'complete') settleStartup();
 }
 
 if (typeof document !== 'undefined') initHannaLift();
